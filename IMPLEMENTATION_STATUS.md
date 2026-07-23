@@ -1,7 +1,7 @@
 # Implementation Status
 
 - Current stage: Maintainability remediation Phase 1 — Transactional Outbox complete
-- Release state: local verification complete; GitHub CI pending; external providers disabled
+- Release state: Phase 1 local verification and GitHub CI complete; external providers disabled
 - Updated: 2026-07-24
 
 ## Maintainability remediation Phase 1
@@ -17,6 +17,7 @@
 - Unit/API/Worker: 24 files, 101 tests PASS
 - E2E: existing 8 tests PASS
 - Production build: Web/API/Worker PASS
+- GitHub Actions: run `30030010473` PASS for commit `d5371a2`
 - External connections and real telephone calls: 0
 - Phase 2 and later: not started
 - Detailed report: `docs/verification/maintainability-remediation-report.md`
