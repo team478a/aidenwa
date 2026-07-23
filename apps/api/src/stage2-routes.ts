@@ -1,7 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
-import { Queue } from 'bullmq';
-import Redis from 'ioredis';
 import { parse } from 'csv-parse/sync';
 import iconv from 'iconv-lite';
 import { randomUUID } from 'node:crypto';
@@ -32,6 +30,7 @@ import {
   tagPatchSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
+import { enqueueOutbox } from './outbox.js';
 import { checkOptOut, findDuplicateCandidates } from './stage2-services.js';
 import type { AuthContext } from './types.js';
 
@@ -736,19 +735,16 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
     if (!job) return deps.error(reply, 404, 'NOT_FOUND', 'インポートが見つかりません');
     if (!['preview_ready', 'queued'].includes(job.status))
       return deps.error(reply, 409, 'INVALID_STATE', '実行できない状態です');
-    await prisma.importJob.update({ where: { id }, data: { status: 'queued' } });
-    const connection = new Redis(deps.env.REDIS_URL, { maxRetriesPerRequest: null });
-    const queue = new Queue('sales-ai-jobs', { connection });
-    try {
-      await queue.add(
-        'company-import',
-        { importJobId: id, organizationId: auth.organizationId },
-        { jobId: `company-import-${id}`, removeOnComplete: 100, removeOnFail: 100 },
-      );
-    } finally {
-      await queue.close();
-      connection.disconnect();
-    }
+    await prisma.$transaction(async (tx) => {
+      await tx.importJob.update({ where: { id }, data: { status: 'queued' } });
+      await enqueueOutbox(tx, {
+        organizationId: auth.organizationId,
+        eventType: 'company-import',
+        aggregateType: 'import_job',
+        aggregateId: id,
+        payload: { importJobId: id, organizationId: auth.organizationId },
+      });
+    });
     await auditChild(request, auth, 'import.executed', 'import_job', id, undefined, {
       status: 'queued',
       totalRows: job.totalRows,

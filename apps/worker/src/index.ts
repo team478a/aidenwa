@@ -1,4 +1,4 @@
-import { Worker, type Job } from 'bullmq';
+import { Queue, Worker, type Job } from 'bullmq';
 import Redis from 'ioredis';
 import { PrismaClient } from '@sales-ai/database';
 import {
@@ -14,6 +14,7 @@ import { cleanupRealtimeData } from './realtime-cleanup.js';
 import { reopenSnoozedFollowups } from './followup.js';
 import { cleanupExpiredHandoffs } from './handoff-cleanup.js';
 import { maintainAppointments } from './appointment.js';
+import { publishOutboxBatch, repairOutboxGaps } from './outbox.js';
 import {
   expireTwilioAuthorizations,
   processTwilioCall,
@@ -23,6 +24,7 @@ import {
 
 const env = workerEnvSchema.parse(process.env);
 const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+const queue = new Queue('sales-ai-jobs', { connection });
 const prisma = new PrismaClient({
   datasources: {
     db: {
@@ -201,6 +203,18 @@ const worker = new Worker('sales-ai-jobs', processor, {
   connection,
   concurrency: env.MOCK_WORKER_CONCURRENCY,
 });
+let outboxPublishing = false;
+async function runOutboxPublisher() {
+  if (outboxPublishing) return;
+  outboxPublishing = true;
+  try {
+    await publishOutboxBatch(prisma, queue);
+  } catch (cause) {
+    console.error('outbox_publish_failed', cause instanceof Error ? cause.name : 'UnknownError');
+  } finally {
+    outboxPublishing = false;
+  }
+}
 async function writeHealth() {
   await connection.set(
     env.WORKER_HEALTH_KEY,
@@ -210,7 +224,10 @@ async function writeHealth() {
   );
 }
 await writeHealth();
+await repairOutboxGaps(prisma);
+await runOutboxPublisher();
 const healthTimer = setInterval(() => void writeHealth(), 5_000);
+const outboxTimer = setInterval(() => void runOutboxPublisher(), 5_000);
 const cleanupTimer = setInterval(
   () =>
     void Promise.all([
@@ -232,6 +249,7 @@ const cleanupTimer = setInterval(
       cleanupExpiredHandoffs(prisma),
       maintainAppointments(prisma),
       expireTwilioAuthorizations(prisma),
+      repairOutboxGaps(prisma),
       ...(env.VOICE_PROVIDER === 'twilio' && env.PRODUCTION_CALLS_ENABLED
         ? [reconcileTwilioCosts(prisma, env)]
         : []),
@@ -240,9 +258,11 @@ const cleanupTimer = setInterval(
 );
 async function shutdown() {
   clearInterval(healthTimer);
+  clearInterval(outboxTimer);
   clearInterval(cleanupTimer);
   await connection.del(env.WORKER_HEALTH_KEY);
   await worker.close();
+  await queue.close();
   await prisma.$disconnect();
   connection.disconnect();
 }

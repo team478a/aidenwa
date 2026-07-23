@@ -15,6 +15,7 @@ import {
   stopSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
+import { enqueueOutbox } from './outbox.js';
 import type { AuthContext } from './types.js';
 
 type Deps = {
@@ -336,48 +337,40 @@ export function registerStage4Routes(app: FastifyInstance, deps: Deps) {
       return deps.error(reply, 403, 'FORBIDDEN', 'システム停止はシステム管理者のみ実行できます');
     const organizationId =
       parsed.data.scope === 'system' ? null : org(auth, parsed.data.organizationId);
-    const stop = await prisma.emergencyStop.create({
-      data: {
-        organizationId,
-        scope: parsed.data.scope,
-        scopeId: parsed.data.scopeId ?? null,
-        reason: parsed.data.reason,
-        activatedBy: auth.userId,
-      },
-    });
-    const emergencyConnection = new Redis(deps.redisUrl, { maxRetriesPerRequest: null });
-    const emergencyQueue = new Queue('sales-ai-jobs', { connection: emergencyConnection });
-    try {
-      await emergencyQueue.add(
-        'twilio-emergency-stop',
-        {
+    const stop = await prisma.$transaction(async (tx) => {
+      const created = await tx.emergencyStop.create({
+        data: {
           organizationId,
-          scope: stop.scope,
-          scopeId: stop.scopeId,
-          emergencyStopId: stop.id,
+          scope: parsed.data.scope,
+          scopeId: parsed.data.scopeId ?? null,
+          reason: parsed.data.reason,
+          activatedBy: auth.userId,
         },
-        {
-          jobId: `twilio-emergency-stop-${stop.id}`,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
-          removeOnComplete: 100,
-          removeOnFail: 100,
+      });
+      await tx.callJob.updateMany({
+        where: {
+          ...(organizationId ? { organizationId } : {}),
+          status: { in: ['queued', 'reserved', 'dispatching'] },
         },
-      );
-    } finally {
-      await emergencyQueue.close();
-      emergencyConnection.disconnect();
-    }
-    await prisma.callJob.updateMany({
-      where: {
-        ...(organizationId ? { organizationId } : {}),
-        status: { in: ['queued', 'reserved', 'dispatching'] },
-      },
-      data: {
-        status: 'skipped',
-        errorCode: 'emergency_stop',
-        errorMessage: 'Stage 4A safety stop',
-      },
+        data: {
+          status: 'skipped',
+          errorCode: 'emergency_stop',
+          errorMessage: 'Stage 4A safety stop',
+        },
+      });
+      await enqueueOutbox(tx, {
+        organizationId,
+        eventType: 'twilio-emergency-stop',
+        aggregateType: 'emergency_stop',
+        aggregateId: created.id,
+        payload: {
+          organizationId,
+          scope: created.scope,
+          scopeId: created.scopeId,
+          emergencyStopId: created.id,
+        },
+      });
+      return created;
     });
     await audit(
       request,

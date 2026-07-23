@@ -1,8 +1,25 @@
 # Implementation Status
 
-- Current stage: Stage 4F local stabilization complete; remote CI pending; external providers disabled
-- Release state: `LOCAL_STABILIZATION_COMPLETE_CI_PENDING`
-- Updated: 2026-07-23
+- Current stage: Maintainability remediation Phase 1 — Transactional Outbox complete
+- Release state: local verification complete; GitHub CI pending; external providers disabled
+- Updated: 2026-07-24
+
+## Maintainability remediation Phase 1
+
+- PostgreSQL transactional outbox added for company import, mock calls, Twilio limited calls, emergency stops and authorization rollback
+- API business state and outbox intent now commit atomically; existing response formats are unchanged
+- Worker publisher uses Zod payload validation, deterministic BullMQ job IDs, bounded batches, exponential backoff, terminal failure and stale-lock recovery
+- Startup/hourly maintenance repairs queued imports/calls, reserved executions, requested rollbacks and orphan queued campaign targets
+- Migration: `20260724010000_phase1_transactional_outbox`
+- Focused Outbox DB tests: transaction rollback, Queue failure/redelivery, duplicate-safe job ID, Worker restart and legacy-gap repair
+- Empty DB: all 12 migrations, seed and zero Prisma drift PASS
+- lint / format / typecheck: PASS
+- Unit/API/Worker: 24 files, 101 tests PASS
+- E2E: existing 8 tests PASS
+- Production build: Web/API/Worker PASS
+- External connections and real telephone calls: 0
+- Phase 2 and later: not started
+- Detailed report: `docs/verification/maintainability-remediation-report.md`
 
 ## Stage 4F completion audit
 

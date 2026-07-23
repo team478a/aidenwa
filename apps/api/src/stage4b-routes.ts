@@ -1,7 +1,5 @@
 import { createHash, createHmac } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { Queue } from 'bullmq';
-import Redis from 'ioredis';
 import { Prisma, UserRole, evaluateProductionGate, type PrismaClient } from '@sales-ai/database';
 import {
   productionTestAuthorizationSchema,
@@ -15,6 +13,7 @@ import {
 } from '@sales-ai/validation';
 import { TwilioVoiceProvider, buildStage4B1Twiml, maskPhone } from '@sales-ai/voice-provider';
 import { requestMetadata, writeAudit } from './audit.js';
+import { enqueueOutbox } from './outbox.js';
 import type { AuthContext } from './types.js';
 type Deps = {
   prisma: PrismaClient;
@@ -349,41 +348,32 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
     const id = (request.params as { id: string }).id;
     const before = await prisma.productionTestAuthorization.findUnique({ where: { id } });
     if (!before) return deps.error(reply, 404, 'NOT_FOUND', '限定テスト承認がありません');
-    const [, authorization] = await prisma.$transaction([
-      prisma.providerConfiguration.updateMany({
+    const authorization = await prisma.$transaction(async (tx) => {
+      await tx.providerConfiguration.updateMany({
         where: { organizationId: before.organizationId, provider: 'twilio' },
         data: { productionEnabled: false, updatedBy: auth.userId },
-      }),
-      prisma.productionTestAuthorization.update({
+      });
+      const updated = await tx.productionTestAuthorization.update({
         where: { id },
         data: {
           status: 'suspended',
           rollbackStatus: 'requested',
           decisionReason: parsed.data.reason,
         },
-      }),
-    ]);
-    const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
-    const queue = new Queue('sales-ai-jobs', { connection });
-    try {
-      await queue.add(
-        'twilio-emergency-stop',
-        {
+      });
+      await enqueueOutbox(tx, {
+        organizationId: before.organizationId,
+        eventType: 'twilio-emergency-stop',
+        aggregateType: 'production_test_authorization',
+        aggregateId: before.id,
+        payload: {
           organizationId: before.organizationId,
           scope: 'organization',
           authorizationId: before.id,
         },
-        {
-          jobId: `twilio-rollback-${id}-${Date.now()}`,
-          attempts: 3,
-          removeOnComplete: 100,
-          removeOnFail: 100,
-        },
-      );
-    } finally {
-      await queue.close();
-      connection.disconnect();
-    }
+      });
+      return updated;
+    });
     await audit(prisma, request, auth, before.organizationId, 'twilio_limited_test.rollback', id, {
       reason: parsed.data.reason,
       status: 'requested',
@@ -538,7 +528,7 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
             );
           if ((reserved._sum.reservedCostMinor ?? 0) + estimate > authorization.budgetLimitMinor)
             throw new ReservationConflict('BUDGET_LIMIT', '予算上限を超えるため予約できません');
-          return tx.realCallExecution.create({
+          const created = await tx.realCallExecution.create({
             data: {
               organizationId: auth.organizationId,
               authorizationId: authorization.id,
@@ -552,6 +542,14 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
               currency: authorization.currency,
             },
           });
+          await enqueueOutbox(tx, {
+            organizationId: auth.organizationId,
+            eventType: 'twilio-call',
+            aggregateType: 'real_call_execution',
+            aggregateId: created.id,
+            payload: { executionId: created.id },
+          });
+          return created;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
@@ -559,23 +557,6 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
       if (cause instanceof ReservationConflict)
         return deps.error(reply, 409, cause.code, cause.message);
       throw cause;
-    }
-    const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
-    const queue = new Queue('sales-ai-jobs', { connection });
-    try {
-      await queue.add(
-        'twilio-call',
-        { executionId: execution.id },
-        {
-          jobId: `twilio-call-${execution.id}`,
-          attempts: 1,
-          removeOnComplete: 100,
-          removeOnFail: 100,
-        },
-      );
-    } finally {
-      await queue.close();
-      connection.disconnect();
     }
     await audit(prisma, request, auth, auth.organizationId, 'twilio_call.reserved', execution.id, {
       destination: maskPhone(phone.normalizedNumber),

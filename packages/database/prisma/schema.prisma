@@ -1632,6 +1632,28 @@ model SalesHandoffFeedback {
   @@map("sales_handoff_feedback")
 }
 
+model OutboxEvent {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String?   @map("organization_id") @db.Uuid
+  eventType      String    @map("event_type")
+  aggregateType  String    @map("aggregate_type")
+  aggregateId    String    @map("aggregate_id")
+  payload        Json
+  status         String    @default("pending")
+  attemptCount   Int       @default(0) @map("attempt_count")
+  availableAt    DateTime  @default(now()) @map("available_at")
+  lockedAt       DateTime? @map("locked_at")
+  publishedAt    DateTime? @map("published_at")
+  lastErrorCode  String?   @map("last_error_code")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@unique([eventType, aggregateId])
+  @@index([status, availableAt])
+  @@index([organizationId, createdAt])
+  @@map("outbox_events")
+}
+
 model HandoffSetting {
   id               String    @id @default(uuid()) @db.Uuid
   organizationId   String    @map("organization_id") @db.Uuid

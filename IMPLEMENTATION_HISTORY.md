@@ -174,3 +174,15 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Verified Prisma format/validate/generate, lint, formatting, typecheck, 97 Unit/API/Worker tests, 8 E2E tests and all production builds.
 - Inspected 790 audit rows by forbidden-key query with zero matches and confirmed zero expired import jobs; no real telephone or external provider action occurred.
 - Recorded the local release state as `LOCAL_STABILIZATION_COMPLETE_CI_PENDING`; GitHub Actions, deployment and real-provider verification were not run.
+
+## 2026-07-24 — Maintainability remediation Phase 1
+
+- Added migration `20260724010000_phase1_transactional_outbox` and the `outbox_events` durable delivery table without modifying prior migrations.
+- Moved company-import, mock-call, Twilio limited-call, emergency-stop and authorization-rollback scheduling into the same PostgreSQL transaction as their business-state changes.
+- Replaced timestamp-based rollback job IDs with deterministic aggregate-based BullMQ job IDs.
+- Added a Worker Outbox Publisher with Zod payload validation, bounded claims, exponential backoff, eight-attempt failure, stale-lock recovery and restart-safe at-least-once publication.
+- Added startup/hourly repair for queued imports, queued mock calls, reserved real-call executions, requested rollbacks and queued campaign targets without a call job.
+- Added DB tests for transaction rollback, Queue failure/redelivery, duplicate-safe job IDs, Worker restart and all specified legacy-gap categories.
+- Added Outbox architecture decision, recovery runbook and maintainability remediation report.
+- Verified all 12 migrations and seed on an empty database with zero Prisma drift, 101 Unit/API/Worker tests, 8 E2E tests, static checks and all production builds.
+- Kept all external integration flags false and made zero real telephone or external Provider calls.

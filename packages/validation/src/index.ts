@@ -7,3 +7,4 @@ export * from './stage4b';
 export * from './stage4b2';
 export * from './stage4d';
 export * from './stage4e';
+export * from './outbox';

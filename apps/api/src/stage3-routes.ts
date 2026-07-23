@@ -1,6 +1,4 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { Queue } from 'bullmq';
-import Redis from 'ioredis';
 import { Prisma, type PrismaClient, UserRole } from '@sales-ai/database';
 import {
   agentVersionSchema,
@@ -16,6 +14,7 @@ import {
   simulateSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
+import { enqueueOutbox } from './outbox.js';
 import { simulateScenario, targetEligibility, validateScenario } from './stage3-services.js';
 import type { AuthContext } from './types.js';
 
@@ -562,35 +561,28 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
       return { dispatched: false, exclusionReason: eligibility.reason };
     }
     const idempotencyKey = `${id}:${target.id}:${target.attemptCount + 1}`;
-    const job = await prisma.callJob.upsert({
-      where: { idempotencyKey },
-      update: {},
-      create: {
-        organizationId: auth.organizationId,
-        campaignId: id,
-        campaignTargetId: target.id,
-        idempotencyKey,
-        fixture,
-      },
-    });
-    await prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'queued' } });
-    const connection = new Redis(deps.redisUrl, { maxRetriesPerRequest: null });
-    const queue = new Queue('sales-ai-jobs', { connection });
-    try {
-      await queue.add(
-        'mock-call',
-        { callJobId: job.id, organizationId: auth.organizationId },
-        {
-          jobId: `mock-call-${job.id}`,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
-          removeOnComplete: 100,
+    const job = await prisma.$transaction(async (tx) => {
+      const queuedJob = await tx.callJob.upsert({
+        where: { idempotencyKey },
+        update: {},
+        create: {
+          organizationId: auth.organizationId,
+          campaignId: id,
+          campaignTargetId: target.id,
+          idempotencyKey,
+          fixture,
         },
-      );
-    } finally {
-      await queue.close();
-      connection.disconnect();
-    }
+      });
+      await tx.campaignTarget.update({ where: { id: target.id }, data: { status: 'queued' } });
+      await enqueueOutbox(tx, {
+        organizationId: auth.organizationId,
+        eventType: 'mock-call',
+        aggregateType: 'call_job',
+        aggregateId: queuedJob.id,
+        payload: { callJobId: queuedJob.id, organizationId: auth.organizationId },
+      });
+      return queuedJob;
+    });
     await audit(request, auth, 'mock_call.queued', 'call_job', job.id, {
       campaignId: id,
       targetId: target.id,
