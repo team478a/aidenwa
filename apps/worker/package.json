@@ -1,0 +1,20 @@
+{
+  "name": "@sales-ai/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sales-ai/database": "workspace:*",
+    "@sales-ai/shared": "workspace:*",
+    "@sales-ai/voice-provider": "workspace:*",
+    "@sales-ai/validation": "workspace:*",
+    "bullmq": "^5.52.2",
+    "ioredis": "^5.6.1"
+  }
+}

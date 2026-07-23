@@ -1,0 +1,58 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_DB: sales_ai, POSTGRES_USER: sales_ai, POSTGRES_PASSWORD: sales_ai_dev }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U sales_ai -d sales_ai"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sales_ai:sales_ai_dev@localhost:5432/sales_ai?schema=public
+      REDIS_URL: redis://localhost:6379
+      SEED_ADMIN_PASSWORD: Stage1-CI-Admin!
+      SEED_SYSTEM_ADMIN_PASSWORD: Stage4A-CI-System!
+      SEED_MANAGER_PASSWORD: Stage1-CI-Manager!
+      SEED_SALES_PASSWORD: Stage1-CI-Sales!
+      VOICE_PROVIDER: mock
+      PRODUCTION_CALLS_ENABLED: 'false'
+      REALTIME_AI_ENABLED: 'false'
+      TWILIO_MEDIA_STREAMS_ENABLED: 'false'
+      ZOOM_PHONE_INTEGRATION_ENABLED: 'false'
+      ZOOM_PHONE_OUTBOUND_ENABLED: 'false'
+      AI_HANDOFF_ENABLED: 'false'
+      CALENDAR_INTEGRATION_ENABLED: 'false'
+      AI_APPOINTMENT_BOOKING_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.10.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm --filter @sales-ai/database exec prisma format --check
+      - run: pnpm --filter @sales-ai/database exec prisma validate
+      - run: pnpm db:migrate
+      - run: pnpm db:seed
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - run: pnpm build

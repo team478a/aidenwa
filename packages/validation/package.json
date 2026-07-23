@@ -1,0 +1,17 @@
+{
+  "name": "@sales-ai/validation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./env": "./src/env.ts",
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sales-ai/shared": "workspace:*",
+    "zod": "^3.25.28"
+  }
+}

@@ -1,0 +1,2 @@
+name,corporateNumber,phone,phoneType,websiteUrl,contactName,email,prefecture,city,address
+Stage2 CSV Smoke,9876543210123,03-9876-5432,representative,https://stage2-smoke.example,取込担当,import@example.local,東京都,千代田区,丸の内1-1

@@ -1,0 +1,1653 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model InfrastructureHealth {
+  id        String   @id @default(cuid())
+  component String
+  status    String
+  checkedAt DateTime @default(now()) @map("checked_at")
+
+  @@map("infrastructure_health")
+}
+
+enum OrganizationStatus {
+  active
+  suspended
+}
+
+enum TeamStatus {
+  active
+  suspended
+}
+
+enum UserRole {
+  system_admin
+  admin
+  manager
+  sales
+}
+
+enum UserStatus {
+  invited
+  active
+  suspended
+}
+
+model Organization {
+  id           String             @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String             @unique
+  timezone     String             @default("Asia/Tokyo")
+  status       OrganizationStatus @default(active)
+  settings     Json               @default("{}")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  teams        Team[]
+  users        User[]
+  sessions     Session[]
+  auditLogs    AuditLog[]
+  companies    Company[]
+  contacts     CompanyContact[]
+  phoneNumbers PhoneNumber[]
+  tags         Tag[]
+  salesLists   SalesList[]
+  optOuts      OptOut[]
+  importJobs   ImportJob[]
+
+  @@map("organizations")
+}
+
+model Team {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String
+  managerUserId  String?      @map("manager_user_id") @db.Uuid
+  status         TeamStatus   @default(active)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  manager        User?        @relation("TeamManager", fields: [managerUserId], references: [id], onDelete: SetNull)
+  users          User[]       @relation("TeamMembers")
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("teams")
+}
+
+model User {
+  id                 String             @id @default(uuid()) @db.Uuid
+  organizationId     String             @map("organization_id") @db.Uuid
+  teamId             String?            @map("team_id") @db.Uuid
+  name               String
+  email              String
+  passwordHash       String             @map("password_hash")
+  role               UserRole
+  status             UserStatus         @default(invited)
+  lastLoginAt        DateTime?          @map("last_login_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  team               Team?              @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  managedTeams       Team[]             @relation("TeamManager")
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  ownedCompanies     Company[]          @relation("CompanyOwner")
+  assignedTags       CompanyTag[]       @relation("TagAssigner")
+  createdSalesLists  SalesList[]        @relation("SalesListCreator")
+  addedListCompanies SalesListCompany[] @relation("ListCompanyAdder")
+  registeredOptOuts  OptOut[]           @relation("OptOutRegistrar")
+  releasedOptOuts    OptOut[]           @relation("OptOutReleaser")
+  importJobs         ImportJob[]        @relation("ImportCreator")
+
+  @@unique([organizationId, email])
+  @@index([organizationId, status])
+  @@map("users")
+}
+
+model Session {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  tokenHash      String       @unique @map("token_hash")
+  csrfTokenHash  String       @map("csrf_token_hash")
+  expiresAt      DateTime     @map("expires_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  lastSeenAt     DateTime     @default(now()) @map("last_seen_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([organizationId])
+  @@map("sessions")
+}
+
+model AuditLog {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String?       @map("organization_id") @db.Uuid
+  userId         String?       @map("user_id") @db.Uuid
+  action         String
+  entityType     String        @map("entity_type")
+  entityId       String?       @map("entity_id")
+  beforeData     Json?         @map("before_data")
+  afterData      Json?         @map("after_data")
+  ipAddress      String?       @map("ip_address")
+  userAgent      String?       @map("user_agent")
+  occurredAt     DateTime      @default(now()) @map("occurred_at")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, occurredAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+enum SalesStatus {
+  uncontacted
+  planned
+  contacting
+  gatekeeper_reached
+  decision_contact_reached
+  retry
+  material_sent
+  qualified
+  appointment
+  negotiating
+  won
+  lost
+  excluded
+  opt_out
+  on_hold
+}
+
+enum ContactDecisionRole {
+  unknown
+  contact
+  champion
+  decision_maker
+}
+
+enum VerificationStatus {
+  unverified
+  ai_extracted
+  verified
+}
+
+enum PhoneNumberType {
+  representative
+  department
+  store
+  direct
+  mobile
+  fax
+  unknown
+}
+
+enum RecordStatus {
+  active
+  archived
+}
+
+enum AssignedSource {
+  manual
+  import
+  system
+}
+
+enum SalesListType {
+  static
+  dynamic
+}
+
+enum OptOutScope {
+  company
+  phone
+  contact
+  channel
+}
+
+enum OptOutChannel {
+  all
+  phone
+  email
+  form
+  sms
+}
+
+enum OptOutStatus {
+  active
+  released
+}
+
+enum OptOutReasonCode {
+  customer_request
+  complaint
+  existing_customer
+  competitor
+  internal_block
+  invalid_number
+  closed_business
+  duplicate
+  out_of_scope
+  other
+}
+
+enum ImportStatus {
+  uploaded
+  mapping_required
+  preview_ready
+  queued
+  processing
+  completed
+  completed_with_errors
+  failed
+  cancelled
+}
+
+enum DuplicatePolicy {
+  create
+  update
+  fill_blank
+  skip
+  review
+}
+
+enum ImportRowAction {
+  create
+  update
+  fill_blank
+  skip
+  review
+  error
+}
+
+model Company {
+  id               String             @id @default(uuid()) @db.Uuid
+  organizationId   String             @map("organization_id") @db.Uuid
+  corporateNumber  String?            @map("corporate_number")
+  name             String
+  normalizedName   String             @map("normalized_name")
+  nameKana         String?            @map("name_kana")
+  tradeName        String?            @map("trade_name")
+  websiteUrl       String?            @map("website_url")
+  inquiryUrl       String?            @map("inquiry_url")
+  industryCode     String?            @map("industry_code")
+  industryName     String?            @map("industry_name")
+  employeeRange    String?            @map("employee_range")
+  annualSalesRange String?            @map("annual_sales_range")
+  establishedYear  Int?               @map("established_year")
+  postalCode       String?            @map("postal_code")
+  prefecture       String?
+  city             String?
+  address          String?
+  businessHours    String?            @map("business_hours")
+  closedDays       String?            @map("closed_days")
+  salesStatus      SalesStatus        @default(uncontacted) @map("sales_status")
+  ownerUserId      String?            @map("owner_user_id") @db.Uuid
+  sourceType       String?            @map("source_type")
+  sourceUrl        String?            @map("source_url")
+  sourceMetadata   Json               @default("{}") @map("source_metadata")
+  lastContactedAt  DateTime?          @map("last_contacted_at")
+  nextActionAt     DateTime?          @map("next_action_at")
+  nextActionType   String?            @map("next_action_type")
+  isCustomer       Boolean            @default(false) @map("is_customer")
+  isDeleted        Boolean            @default(false) @map("is_deleted")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  owner            User?              @relation("CompanyOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  contacts         CompanyContact[]
+  phoneNumbers     PhoneNumber[]
+  companyTags      CompanyTag[]
+  listCompanies    SalesListCompany[]
+  optOuts          OptOut[]
+  importRows       ImportRow[]
+
+  @@unique([organizationId, corporateNumber])
+  @@index([organizationId, isDeleted, updatedAt(sort: Desc)])
+  @@index([organizationId, normalizedName])
+  @@index([organizationId, salesStatus])
+  @@index([organizationId, ownerUserId])
+  @@map("companies")
+}
+
+model CompanyContact {
+  id                 String              @id @default(uuid()) @db.Uuid
+  organizationId     String              @map("organization_id") @db.Uuid
+  companyId          String              @map("company_id") @db.Uuid
+  name               String
+  nameKana           String?             @map("name_kana")
+  department         String?
+  position           String?
+  email              String?
+  decisionRole       ContactDecisionRole @default(unknown) @map("decision_role")
+  verificationStatus VerificationStatus  @default(unverified) @map("verification_status")
+  sourceType         String?             @map("source_type")
+  verifiedAt         DateTime?           @map("verified_at")
+  notes              String?
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  isDeleted          Boolean             @default(false) @map("is_deleted")
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  phoneNumbers       PhoneNumber[]
+  optOuts            OptOut[]
+
+  @@index([organizationId, companyId, isDeleted])
+  @@index([organizationId, email])
+  @@map("company_contacts")
+}
+
+model PhoneNumber {
+  id               String          @id @default(uuid()) @db.Uuid
+  organizationId   String          @map("organization_id") @db.Uuid
+  companyId        String          @map("company_id") @db.Uuid
+  contactId        String?         @map("contact_id") @db.Uuid
+  rawNumber        String          @map("raw_number")
+  normalizedNumber String          @map("normalized_number")
+  e164Number       String?         @map("e164_number")
+  type             PhoneNumberType @default(unknown)
+  label            String?
+  isPrimary        Boolean         @default(false) @map("is_primary")
+  isValid          Boolean         @default(true) @map("is_valid")
+  isCallable       Boolean         @default(true) @map("is_callable")
+  lastCalledAt     DateTime?       @map("last_called_at")
+  lastCallResult   String?         @map("last_call_result")
+  totalCallCount   Int             @default(0) @map("total_call_count")
+  nextCallableAt   DateTime?       @map("next_callable_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  isDeleted        Boolean         @default(false) @map("is_deleted")
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  company          Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  contact          CompanyContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  optOuts          OptOut[]
+
+  @@index([organizationId, normalizedNumber])
+  @@index([organizationId, companyId, isDeleted])
+  @@map("phone_numbers")
+}
+
+model Tag {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String
+  color          String       @default("#64748b")
+  description    String?
+  status         RecordStatus @default(active)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  companyTags    CompanyTag[]
+
+  @@unique([organizationId, name])
+  @@map("tags")
+}
+
+model CompanyTag {
+  companyId      String         @map("company_id") @db.Uuid
+  tagId          String         @map("tag_id") @db.Uuid
+  assignedBy     String?        @map("assigned_by") @db.Uuid
+  assignedSource AssignedSource @default(manual) @map("assigned_source")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tag            Tag            @relation(fields: [tagId], references: [id], onDelete: Restrict)
+  assigner       User?          @relation("TagAssigner", fields: [assignedBy], references: [id], onDelete: SetNull)
+
+  @@id([companyId, tagId])
+  @@map("company_tags")
+}
+
+model SalesList {
+  id               String             @id @default(uuid()) @db.Uuid
+  organizationId   String             @map("organization_id") @db.Uuid
+  name             String
+  description      String?
+  listType         SalesListType      @default(static) @map("list_type")
+  filterConditions Json               @default("{}") @map("filter_conditions")
+  status           RecordStatus       @default(active)
+  createdBy        String             @map("created_by") @db.Uuid
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  isDeleted        Boolean            @default(false) @map("is_deleted")
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  creator          User               @relation("SalesListCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  companies        SalesListCompany[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isDeleted])
+  @@map("sales_lists")
+}
+
+model SalesListCompany {
+  salesListId String         @map("sales_list_id") @db.Uuid
+  companyId   String         @map("company_id") @db.Uuid
+  addedBy     String?        @map("added_by") @db.Uuid
+  addedSource AssignedSource @default(manual) @map("added_source")
+  addedAt     DateTime       @default(now()) @map("added_at")
+  removedAt   DateTime?      @map("removed_at")
+  salesList   SalesList      @relation(fields: [salesListId], references: [id], onDelete: Cascade)
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  adder       User?          @relation("ListCompanyAdder", fields: [addedBy], references: [id], onDelete: SetNull)
+
+  @@id([salesListId, companyId])
+  @@index([companyId])
+  @@map("sales_list_companies")
+}
+
+model OptOut {
+  id                      String           @id @default(uuid()) @db.Uuid
+  organizationId          String           @map("organization_id") @db.Uuid
+  companyId               String?          @map("company_id") @db.Uuid
+  phoneNumberId           String?          @map("phone_number_id") @db.Uuid
+  contactId               String?          @map("contact_id") @db.Uuid
+  normalizedPhoneSnapshot String?          @map("normalized_phone_snapshot")
+  emailSnapshot           String?          @map("email_snapshot")
+  scope                   OptOutScope
+  channel                 OptOutChannel
+  reasonCode              OptOutReasonCode @map("reason_code")
+  reasonText              String?          @map("reason_text")
+  evidenceText            String?          @map("evidence_text")
+  status                  OptOutStatus     @default(active)
+  registeredBy            String           @map("registered_by") @db.Uuid
+  registeredAt            DateTime         @default(now()) @map("registered_at")
+  releasedBy              String?          @map("released_by") @db.Uuid
+  releasedAt              DateTime?        @map("released_at")
+  releaseReason           String?          @map("release_reason")
+  createdAt               DateTime         @default(now()) @map("created_at")
+  updatedAt               DateTime         @updatedAt @map("updated_at")
+  organization            Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  company                 Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  phoneNumber             PhoneNumber?     @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  contact                 CompanyContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  registrar               User             @relation("OptOutRegistrar", fields: [registeredBy], references: [id], onDelete: Restrict)
+  releaser                User?            @relation("OptOutReleaser", fields: [releasedBy], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, companyId])
+  @@index([organizationId, status, normalizedPhoneSnapshot])
+  @@index([organizationId, status, emailSnapshot])
+  @@map("opt_outs")
+}
+
+model ImportJob {
+  id               String          @id @default(uuid()) @db.Uuid
+  organizationId   String          @map("organization_id") @db.Uuid
+  importType       String          @default("companies") @map("import_type")
+  originalFileName String          @map("original_file_name")
+  storageKey       String          @map("storage_key")
+  encoding         String
+  mapping          Json            @default("{}")
+  duplicatePolicy  DuplicatePolicy @default(review) @map("duplicate_policy")
+  status           ImportStatus    @default(uploaded)
+  totalRows        Int             @default(0) @map("total_rows")
+  validRows        Int             @default(0) @map("valid_rows")
+  errorRows        Int             @default(0) @map("error_rows")
+  importedRows     Int             @default(0) @map("imported_rows")
+  skippedRows      Int             @default(0) @map("skipped_rows")
+  createdBy        String          @map("created_by") @db.Uuid
+  createdAt        DateTime        @default(now()) @map("created_at")
+  startedAt        DateTime?       @map("started_at")
+  completedAt      DateTime?       @map("completed_at")
+  expiresAt        DateTime        @map("expires_at")
+  errorMessage     String?         @map("error_message")
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  creator          User            @relation("ImportCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  rows             ImportRow[]
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("import_jobs")
+}
+
+model ImportRow {
+  id                  String          @id @default(uuid()) @db.Uuid
+  importJobId         String          @map("import_job_id") @db.Uuid
+  rowNumber           Int             @map("row_number")
+  rawData             Json            @map("raw_data")
+  normalizedData      Json            @map("normalized_data")
+  validationErrors    Json            @default("[]") @map("validation_errors")
+  duplicateCandidates Json            @default("[]") @map("duplicate_candidates")
+  action              ImportRowAction @default(review)
+  resultCompanyId     String?         @map("result_company_id") @db.Uuid
+  processedAt         DateTime?       @map("processed_at")
+  importJob           ImportJob       @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+  resultCompany       Company?        @relation(fields: [resultCompanyId], references: [id], onDelete: SetNull)
+
+  @@unique([importJobId, rowNumber])
+  @@map("import_rows")
+}
+
+enum VersionStatus {
+  draft
+  published
+  archived
+}
+
+enum ResourceStatus {
+  active
+  archived
+}
+
+enum CampaignStatus {
+  draft
+  ready
+  running
+  paused
+  completed
+  cancelled
+  archived
+}
+
+enum CampaignTargetStatus {
+  pending
+  reserved
+  queued
+  in_progress
+  retry_wait
+  completed
+  excluded
+  cancelled
+}
+
+enum EligibilityStatus {
+  eligible
+  excluded
+}
+
+enum CallJobStatus {
+  queued
+  reserved
+  dispatching
+  in_progress
+  completed
+  failed
+  cancelled
+  skipped
+}
+
+enum ScenarioNodeType {
+  start
+  speak
+  listen
+  branch
+  faq_lookup
+  qualify
+  schedule_request
+  transfer_request
+  opt_out
+  end
+}
+
+model Product {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  name           String
+  code           String
+  category       String?
+  status         ResourceStatus   @default(active)
+  ownerUserId    String?          @map("owner_user_id") @db.Uuid
+  createdBy      String           @map("created_by") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  archivedAt     DateTime?        @map("archived_at")
+  versions       ProductVersion[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("products")
+}
+
+model ProductVersion {
+  id                         String        @id @default(uuid()) @db.Uuid
+  organizationId             String        @map("organization_id") @db.Uuid
+  productId                  String        @map("product_id") @db.Uuid
+  versionNumber              Int           @map("version_number")
+  status                     VersionStatus @default(draft)
+  summary                    String        @default("")
+  targetCustomer             String        @default("") @map("target_customer")
+  customerProblems           Json          @default("[]") @map("customer_problems")
+  valuePropositions          Json          @default("[]") @map("value_propositions")
+  differentiators            Json          @default("[]")
+  pricingSummary             String        @default("") @map("pricing_summary")
+  qualificationConditions    Json          @default("[]") @map("qualification_conditions")
+  disqualificationConditions Json          @default("[]") @map("disqualification_conditions")
+  requiredDisclosures        Json          @default("[]") @map("required_disclosures")
+  prohibitedClaims           Json          @default("[]") @map("prohibited_claims")
+  appointmentGoal            String        @default("") @map("appointment_goal")
+  sourceMetadata             Json          @default("{}") @map("source_metadata")
+  publishedBy                String?       @map("published_by") @db.Uuid
+  publishedAt                DateTime?     @map("published_at")
+  createdBy                  String        @map("created_by") @db.Uuid
+  createdAt                  DateTime      @default(now()) @map("created_at")
+  product                    Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, versionNumber])
+  @@index([organizationId, status])
+  @@map("product_versions")
+}
+
+model AiAgent {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  name           String
+  status         ResourceStatus   @default(active)
+  ownerUserId    String?          @map("owner_user_id") @db.Uuid
+  createdBy      String           @map("created_by") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  archivedAt     DateTime?        @map("archived_at")
+  versions       AiAgentVersion[]
+
+  @@index([organizationId, status])
+  @@map("ai_agents")
+}
+
+model AiAgentVersion {
+  id                     String        @id @default(uuid()) @db.Uuid
+  organizationId         String        @map("organization_id") @db.Uuid
+  aiAgentId              String        @map("ai_agent_id") @db.Uuid
+  versionNumber          Int           @map("version_number")
+  status                 VersionStatus @default(draft)
+  displayName            String        @map("display_name")
+  roleDescription        String        @default("") @map("role_description")
+  language               String        @default("ja")
+  speakingStyle          String        @default("professional") @map("speaking_style")
+  politenessLevel        Int           @default(3) @map("politeness_level")
+  speakingSpeed          Float         @default(1) @map("speaking_speed")
+  interruptionPolicy     String        @default("listen") @map("interruption_policy")
+  silenceTimeoutSeconds  Int           @default(10) @map("silence_timeout_seconds")
+  maxTurns               Int           @default(20) @map("max_turns")
+  maxCallDurationSeconds Int           @default(600) @map("max_call_duration_seconds")
+  openingPolicy          String        @default("") @map("opening_policy")
+  identityDisclosure     String        @default("") @map("identity_disclosure")
+  aiDisclosure           String        @default("") @map("ai_disclosure")
+  recordingDisclosure    String        @default("") @map("recording_disclosure")
+  prohibitedTopics       Json          @default("[]") @map("prohibited_topics")
+  escalationRules        Json          @default("[]") @map("escalation_rules")
+  fallbackMessage        String        @default("") @map("fallback_message")
+  closingMessage         String        @default("") @map("closing_message")
+  publishedBy            String?       @map("published_by") @db.Uuid
+  publishedAt            DateTime?     @map("published_at")
+  createdBy              String        @map("created_by") @db.Uuid
+  createdAt              DateTime      @default(now()) @map("created_at")
+  aiAgent                AiAgent       @relation(fields: [aiAgentId], references: [id], onDelete: Restrict)
+
+  @@unique([aiAgentId, versionNumber])
+  @@index([organizationId, status])
+  @@map("ai_agent_versions")
+}
+
+model ConversationScenario {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  name           String
+  purpose        String            @default("")
+  status         ResourceStatus    @default(active)
+  createdBy      String            @map("created_by") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  archivedAt     DateTime?         @map("archived_at")
+  versions       ScenarioVersion[]
+
+  @@index([organizationId, status])
+  @@map("conversation_scenarios")
+}
+
+model ScenarioVersion {
+  id               String               @id @default(uuid()) @db.Uuid
+  organizationId   String               @map("organization_id") @db.Uuid
+  scenarioId       String               @map("scenario_id") @db.Uuid
+  versionNumber    Int                  @map("version_number")
+  status           VersionStatus        @default(draft)
+  productVersionId String?              @map("product_version_id") @db.Uuid
+  startNodeKey     String?              @map("start_node_key")
+  validationStatus String               @default("unvalidated") @map("validation_status")
+  validationErrors Json                 @default("[]") @map("validation_errors")
+  publishedBy      String?              @map("published_by") @db.Uuid
+  publishedAt      DateTime?            @map("published_at")
+  createdBy        String               @map("created_by") @db.Uuid
+  createdAt        DateTime             @default(now()) @map("created_at")
+  scenario         ConversationScenario @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
+  nodes            ScenarioNode[]
+  edges            ScenarioEdge[]
+
+  @@unique([scenarioId, versionNumber])
+  @@index([organizationId, status])
+  @@map("scenario_versions")
+}
+
+model ScenarioNode {
+  id                String           @id @default(uuid()) @db.Uuid
+  organizationId    String           @map("organization_id") @db.Uuid
+  scenarioVersionId String           @map("scenario_version_id") @db.Uuid
+  nodeKey           String           @map("node_key")
+  nodeType          ScenarioNodeType @map("node_type")
+  title             String
+  instruction       String           @default("")
+  messageTemplate   String           @default("") @map("message_template")
+  expectedIntents   Json             @default("[]") @map("expected_intents")
+  extractionSchema  Json             @default("{}") @map("extraction_schema")
+  timeoutSeconds    Int              @default(15) @map("timeout_seconds")
+  retryLimit        Int              @default(1) @map("retry_limit")
+  positionX         Int              @default(0) @map("position_x")
+  positionY         Int              @default(0) @map("position_y")
+  config            Json             @default("{}")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  version           ScenarioVersion  @relation(fields: [scenarioVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([scenarioVersionId, nodeKey])
+  @@map("scenario_nodes")
+}
+
+model ScenarioEdge {
+  id                String          @id @default(uuid()) @db.Uuid
+  organizationId    String          @map("organization_id") @db.Uuid
+  scenarioVersionId String          @map("scenario_version_id") @db.Uuid
+  fromNodeKey       String          @map("from_node_key")
+  toNodeKey         String          @map("to_node_key")
+  conditionType     String          @map("condition_type")
+  conditionValue    String          @default("") @map("condition_value")
+  priority          Int             @default(100)
+  label             String          @default("")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  version           ScenarioVersion @relation(fields: [scenarioVersionId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioVersionId, fromNodeKey, priority])
+  @@map("scenario_edges")
+}
+
+model KnowledgeBase {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  name           String
+  description    String              @default("")
+  status         ResourceStatus      @default(active)
+  createdBy      String              @map("created_by") @db.Uuid
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  archivedAt     DateTime?           @map("archived_at")
+  documents      KnowledgeDocument[]
+
+  @@index([organizationId, status])
+  @@map("knowledge_bases")
+}
+
+model KnowledgeDocument {
+  id              String           @id @default(uuid()) @db.Uuid
+  organizationId  String           @map("organization_id") @db.Uuid
+  knowledgeBaseId String           @map("knowledge_base_id") @db.Uuid
+  title           String
+  sourceType      String           @default("manual") @map("source_type")
+  sourceUrl       String?          @map("source_url")
+  status          VersionStatus    @default(draft)
+  versionNumber   Int              @default(1) @map("version_number")
+  contentHash     String           @default("") @map("content_hash")
+  publishedBy     String?          @map("published_by") @db.Uuid
+  publishedAt     DateTime?        @map("published_at")
+  createdBy       String           @map("created_by") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  knowledgeBase   KnowledgeBase    @relation(fields: [knowledgeBaseId], references: [id], onDelete: Restrict)
+  entries         KnowledgeEntry[]
+
+  @@unique([knowledgeBaseId, title, versionNumber])
+  @@index([organizationId, status])
+  @@map("knowledge_documents")
+}
+
+model KnowledgeEntry {
+  id                  String            @id @default(uuid()) @db.Uuid
+  organizationId      String            @map("organization_id") @db.Uuid
+  knowledgeDocumentId String            @map("knowledge_document_id") @db.Uuid
+  entryType           String            @default("faq") @map("entry_type")
+  question            String            @default("")
+  answer              String
+  keywords            Json              @default("[]")
+  category            String            @default("")
+  priority            Int               @default(100)
+  status              ResourceStatus    @default(active)
+  validFrom           DateTime?         @map("valid_from")
+  validUntil          DateTime?         @map("valid_until")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  document            KnowledgeDocument @relation(fields: [knowledgeDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@map("knowledge_entries")
+}
+
+model Campaign {
+  id                   String           @id @default(uuid()) @db.Uuid
+  organizationId       String           @map("organization_id") @db.Uuid
+  name                 String
+  description          String           @default("")
+  status               CampaignStatus   @default(draft)
+  productVersionId     String           @map("product_version_id") @db.Uuid
+  aiAgentVersionId     String           @map("ai_agent_version_id") @db.Uuid
+  scenarioVersionId    String           @map("scenario_version_id") @db.Uuid
+  knowledgeBaseId      String?          @map("knowledge_base_id") @db.Uuid
+  salesListId          String           @map("sales_list_id") @db.Uuid
+  timezone             String           @default("Asia/Tokyo")
+  callableWeekdays     Json             @default("[1,2,3,4,5]") @map("callable_weekdays")
+  callableStartTime    String           @default("09:00") @map("callable_start_time")
+  callableEndTime      String           @default("18:00") @map("callable_end_time")
+  maxAttemptsPerTarget Int              @default(3) @map("max_attempts_per_target")
+  retryIntervalMinutes Int              @default(60) @map("retry_interval_minutes")
+  maxConcurrentCalls   Int              @default(1) @map("max_concurrent_calls")
+  dailyCallLimit       Int              @default(100) @map("daily_call_limit")
+  duplicateWindowHours Int              @default(24) @map("duplicate_window_hours")
+  createdBy            String           @map("created_by") @db.Uuid
+  approvedBy           String?          @map("approved_by") @db.Uuid
+  approvedAt           DateTime?        @map("approved_at")
+  startedAt            DateTime?        @map("started_at")
+  pausedAt             DateTime?        @map("paused_at")
+  completedAt          DateTime?        @map("completed_at")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  targets              CampaignTarget[]
+  jobs                 CallJob[]
+
+  @@index([organizationId, status])
+  @@map("campaigns")
+}
+
+model CampaignTarget {
+  id                  String               @id @default(uuid()) @db.Uuid
+  organizationId      String               @map("organization_id") @db.Uuid
+  campaignId          String               @map("campaign_id") @db.Uuid
+  companyId           String               @map("company_id") @db.Uuid
+  phoneNumberId       String?              @map("phone_number_id") @db.Uuid
+  contactId           String?              @map("contact_id") @db.Uuid
+  ownerUserIdSnapshot String?              @map("owner_user_id_snapshot") @db.Uuid
+  status              CampaignTargetStatus @default(pending)
+  eligibilityStatus   EligibilityStatus    @default(eligible) @map("eligibility_status")
+  exclusionReason     String?              @map("exclusion_reason")
+  priority            Int                  @default(100)
+  attemptCount        Int                  @default(0) @map("attempt_count")
+  lastAttemptAt       DateTime?            @map("last_attempt_at")
+  nextAttemptAt       DateTime?            @map("next_attempt_at")
+  reservedAt          DateTime?            @map("reserved_at")
+  completedAt         DateTime?            @map("completed_at")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  campaign            Campaign             @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  jobs                CallJob[]
+
+  @@unique([campaignId, phoneNumberId])
+  @@index([organizationId, campaignId, status])
+  @@map("campaign_targets")
+}
+
+model CallJob {
+  id               String         @id @default(uuid()) @db.Uuid
+  organizationId   String         @map("organization_id") @db.Uuid
+  campaignId       String         @map("campaign_id") @db.Uuid
+  campaignTargetId String         @map("campaign_target_id") @db.Uuid
+  idempotencyKey   String         @unique @map("idempotency_key")
+  provider         String         @default("mock")
+  providerJobId    String?        @map("provider_job_id")
+  status           CallJobStatus  @default(queued)
+  fixture          String         @default("qualified")
+  scheduledAt      DateTime       @default(now()) @map("scheduled_at")
+  reservedAt       DateTime?      @map("reserved_at")
+  startedAt        DateTime?      @map("started_at")
+  completedAt      DateTime?      @map("completed_at")
+  cancelledAt      DateTime?      @map("cancelled_at")
+  errorCode        String?        @map("error_code")
+  errorMessage     String?        @map("error_message")
+  retryCount       Int            @default(0) @map("retry_count")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  campaign         Campaign       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  target           CampaignTarget @relation(fields: [campaignTargetId], references: [id], onDelete: Restrict)
+  attempts         CallAttempt[]
+
+  @@index([organizationId, status, scheduledAt])
+  @@map("call_jobs")
+}
+
+model CallAttempt {
+  id                String      @id @default(uuid()) @db.Uuid
+  organizationId    String      @map("organization_id") @db.Uuid
+  callJobId         String      @map("call_job_id") @db.Uuid
+  attemptNumber     Int         @map("attempt_number")
+  providerAttemptId String?     @map("provider_attempt_id")
+  startedAt         DateTime    @default(now()) @map("started_at")
+  answeredAt        DateTime?   @map("answered_at")
+  endedAt           DateTime?   @map("ended_at")
+  resultCode        String?     @map("result_code")
+  disposition       String?
+  qualification     String?
+  nextActionType    String?     @map("next_action_type")
+  nextActionAt      DateTime?   @map("next_action_at")
+  summary           String?
+  structuredResult  Json        @default("{}") @map("structured_result")
+  scenarioSnapshot  Json        @default("{}") @map("scenario_snapshot")
+  agentSnapshot     Json        @default("{}") @map("agent_snapshot")
+  productSnapshot   Json        @default("{}") @map("product_snapshot")
+  knowledgeSnapshot Json        @default("{}") @map("knowledge_snapshot")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+  job               CallJob     @relation(fields: [callJobId], references: [id], onDelete: Restrict)
+  events            CallEvent[]
+
+  @@unique([callJobId, attemptNumber])
+  @@map("call_attempts")
+}
+
+model CallEvent {
+  id              String      @id @default(uuid()) @db.Uuid
+  organizationId  String      @map("organization_id") @db.Uuid
+  callAttemptId   String      @map("call_attempt_id") @db.Uuid
+  sequenceNumber  Int         @map("sequence_number")
+  eventType       String      @map("event_type")
+  eventAt         DateTime    @default(now()) @map("event_at")
+  actor           String      @default("mock")
+  payload         Json        @default("{}")
+  providerEventId String?     @unique @map("provider_event_id")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  attempt         CallAttempt @relation(fields: [callAttemptId], references: [id], onDelete: Cascade)
+
+  @@unique([callAttemptId, sequenceNumber])
+  @@index([organizationId, eventAt])
+  @@map("call_events")
+}
+
+enum ProductionApprovalStatus {
+  draft
+  reviewing
+  approved
+  rejected
+  suspended
+  expired
+}
+
+enum EmergencyStopScope {
+  system
+  organization
+  campaign
+  product
+  provider
+}
+
+enum ReadinessState {
+  complete
+  incomplete
+  expired
+  review_required
+  unavailable
+}
+
+model ProductionCallApproval {
+  id                        String                   @id @default(uuid()) @db.Uuid
+  organizationId            String                   @map("organization_id") @db.Uuid
+  status                    ProductionApprovalStatus @default(draft)
+  targetRegions             Json                     @default("[]") @map("target_regions")
+  productIds                Json                     @default("[]") @map("product_ids")
+  purpose                   String                   @default("")
+  aiDisclosure              String                   @default("") @map("ai_disclosure")
+  recordingEnabled          Boolean                  @default(false) @map("recording_enabled")
+  recordingConsentMethod    String                   @default("") @map("recording_consent_method")
+  transcriptionEnabled      Boolean                  @default(false) @map("transcription_enabled")
+  personalDataRetentionDays Int?                     @map("personal_data_retention_days")
+  callableWeekdays          Json                     @default("[]") @map("callable_weekdays")
+  callableStartTime         String                   @default("") @map("callable_start_time")
+  callableEndTime           String                   @default("") @map("callable_end_time")
+  dailyCallLimit            Int?                     @map("daily_call_limit")
+  hourlyCallLimit           Int?                     @map("hourly_call_limit")
+  concurrentCallLimit       Int?                     @map("concurrent_call_limit")
+  maxAttemptsPerCompany     Int?                     @map("max_attempts_per_company")
+  minRetryIntervalMinutes   Int?                     @map("min_retry_interval_minutes")
+  optOutOwner               String                   @default("") @map("opt_out_owner")
+  emergencyStopOwner        String                   @default("") @map("emergency_stop_owner")
+  privacyOwner              String                   @default("") @map("privacy_owner")
+  plannedProvider           String                   @default("") @map("planned_provider")
+  dataResidency             String                   @default("") @map("data_residency")
+  crossBorderConfirmed      Boolean                  @default(false) @map("cross_border_confirmed")
+  humanTransferMethod       String                   @default("") @map("human_transfer_method")
+  limitedTestCallLimit      Int?                     @map("limited_test_call_limit")
+  expiresAt                 DateTime?                @map("expires_at")
+  approvalBasis             String                   @default("") @map("approval_basis")
+  notes                     String                   @default("")
+  requestedBy               String?                  @map("requested_by") @db.Uuid
+  requestedAt               DateTime?                @map("requested_at")
+  decidedBy                 String?                  @map("decided_by") @db.Uuid
+  decidedAt                 DateTime?                @map("decided_at")
+  decisionReason            String?                  @map("decision_reason")
+  createdBy                 String                   @map("created_by") @db.Uuid
+  createdAt                 DateTime                 @default(now()) @map("created_at")
+  updatedAt                 DateTime                 @updatedAt @map("updated_at")
+
+  @@index([organizationId, status])
+  @@map("production_call_approvals")
+}
+
+model ProductionCallPolicy {
+  id                        String   @id @default(uuid()) @db.Uuid
+  organizationId            String   @unique @map("organization_id") @db.Uuid
+  timezone                  String   @default("Asia/Tokyo")
+  dailyCallLimit            Int      @default(10) @map("daily_call_limit")
+  hourlyCallLimit           Int      @default(5) @map("hourly_call_limit")
+  concurrentCallLimit       Int      @default(1) @map("concurrent_call_limit")
+  maxCallDurationSeconds    Int      @default(600) @map("max_call_duration_seconds")
+  dailyDurationLimitSeconds Int      @default(3600) @map("daily_duration_limit_seconds")
+  monthlyBudgetMinor        Int      @default(0) @map("monthly_budget_minor")
+  dailyBudgetMinor          Int      @default(0) @map("daily_budget_minor")
+  currency                  String   @default("JPY")
+  limitedTestCallLimit      Int      @default(1) @map("limited_test_call_limit")
+  mockCostPerCallMinor      Int      @default(10) @map("mock_cost_per_call_minor")
+  updatedBy                 String   @map("updated_by") @db.Uuid
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  @@map("production_call_policies")
+}
+
+model EmergencyStop {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String?            @map("organization_id") @db.Uuid
+  scope          EmergencyStopScope
+  scopeId        String?            @map("scope_id")
+  reason         String
+  active         Boolean            @default(true)
+  activatedBy    String             @map("activated_by") @db.Uuid
+  activatedAt    DateTime           @default(now()) @map("activated_at")
+  releasedBy     String?            @map("released_by") @db.Uuid
+  releasedAt     DateTime?          @map("released_at")
+  releaseReason  String?            @map("release_reason")
+
+  @@index([active, scope, organizationId, scopeId])
+  @@map("emergency_stops")
+}
+
+model ProviderConfiguration {
+  id                 String   @id @default(uuid()) @db.Uuid
+  organizationId     String   @map("organization_id") @db.Uuid
+  provider           String
+  allowed            Boolean  @default(false)
+  productionEnabled  Boolean  @default(false) @map("production_enabled")
+  secretReferenceKey String?  @map("secret_reference_key")
+  updatedBy          String   @map("updated_by") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([organizationId, provider])
+  @@map("provider_configurations")
+}
+
+model TestCallAllowlist {
+  id                    String   @id @default(uuid()) @db.Uuid
+  organizationId        String   @map("organization_id") @db.Uuid
+  normalizedPhoneNumber String   @map("normalized_phone_number")
+  phoneLastFour         String   @map("phone_last_four")
+  region                String
+  ownerName             String   @map("owner_name")
+  purpose               String
+  consentConfirmed      Boolean  @default(false) @map("consent_confirmed")
+  registeredBy          String   @map("registered_by") @db.Uuid
+  expiresAt             DateTime @map("expires_at")
+  active                Boolean  @default(true)
+  notes                 String   @default("")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@unique([organizationId, normalizedPhoneNumber])
+  @@index([organizationId, active, expiresAt])
+  @@map("test_call_allowlists")
+}
+
+model ProviderWebhookEvent {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  provider         String
+  providerEventId  String    @map("provider_event_id")
+  eventType        String    @map("event_type")
+  eventTimestamp   DateTime  @map("event_timestamp")
+  callAttemptId    String?   @map("call_attempt_id") @db.Uuid
+  campaignId       String?   @map("campaign_id") @db.Uuid
+  sequenceNumber   Int?      @map("sequence_number")
+  normalizedData   Json      @default("{}") @map("normalized_data")
+  processingStatus String    @default("received") @map("processing_status")
+  failureCode      String?   @map("failure_code")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  processedAt      DateTime? @map("processed_at")
+
+  @@unique([provider, providerEventId])
+  @@index([organizationId, createdAt])
+  @@map("provider_webhook_events")
+}
+
+model CallUsageCounter {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  periodType      String   @map("period_type")
+  periodStart     DateTime @map("period_start")
+  callCount       Int      @default(0) @map("call_count")
+  activeCalls     Int      @default(0) @map("active_calls")
+  durationSeconds Int      @default(0) @map("duration_seconds")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([organizationId, periodType, periodStart])
+  @@map("call_usage_counters")
+}
+
+model CallBudgetCounter {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  periodType     String   @map("period_type")
+  periodStart    DateTime @map("period_start")
+  amountMinor    Int      @default(0) @map("amount_minor")
+  currency       String   @default("JPY")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([organizationId, periodType, periodStart])
+  @@map("call_budget_counters")
+}
+
+model ProductionGateDecision {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  campaignId     String?   @map("campaign_id") @db.Uuid
+  companyId      String?   @map("company_id") @db.Uuid
+  phoneNumberId  String?   @map("phone_number_id") @db.Uuid
+  provider       String
+  allowed        Boolean
+  reasonCodes    Json      @default("[]") @map("reason_codes")
+  evaluatedAt    DateTime  @default(now()) @map("evaluated_at")
+  expiresAt      DateTime? @map("expires_at")
+
+  @@index([organizationId, evaluatedAt(sort: Desc)])
+  @@map("production_gate_decisions")
+}
+
+enum LimitedTestStatus {
+  draft
+  approved
+  active
+  suspended
+  completed
+  cancelled
+  expired
+}
+
+enum RealCallState {
+  reserved
+  provider_unknown
+  queued
+  initiated
+  ringing
+  in_progress
+  completed
+  busy
+  no_answer
+  failed
+  canceled
+}
+
+model ProductionTestAuthorization {
+  id                     String            @id @default(uuid()) @db.Uuid
+  organizationId         String            @map("organization_id") @db.Uuid
+  provider               String            @default("twilio")
+  status                 LimitedTestStatus @default(draft)
+  releaseCommit          String            @map("release_commit")
+  writtenApprovalCommit  String            @map("written_approval_commit")
+  startsAt               DateTime          @map("starts_at")
+  endsAt                 DateTime          @map("ends_at")
+  maxCalls               Int               @default(5) @map("max_calls")
+  maxDestinations        Int               @default(5) @map("max_destinations")
+  maxCallSeconds         Int               @default(120) @map("max_call_seconds")
+  recordingEnabled       Boolean           @default(false) @map("recording_enabled")
+  transcriptionEnabled   Boolean           @default(false) @map("transcription_enabled")
+  mediaStreamsEnabled    Boolean           @default(false) @map("media_streams_enabled")
+  humanTransferEnabled   Boolean           @default(false) @map("human_transfer_enabled")
+  approvedAllowlistIds   Json              @default("[]") @map("approved_allowlist_ids")
+  budgetLimitMinor       Int               @map("budget_limit_minor")
+  currency               String            @default("JPY")
+  createdBy              String            @map("created_by") @db.Uuid
+  approvedBy             String?           @map("approved_by") @db.Uuid
+  approvedAt             DateTime?         @map("approved_at")
+  activatedBy            String?           @map("activated_by") @db.Uuid
+  activatedAt            DateTime?         @map("activated_at")
+  decisionReason         String?           @map("decision_reason")
+  rollbackStatus         String            @default("not_started") @map("rollback_status")
+  sourceNumberApprovalId String?           @map("source_number_approval_id") @db.Uuid
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
+
+  @@index([organizationId, status, startsAt, endsAt])
+  @@map("production_test_authorizations")
+}
+
+model RealCallExecution {
+  id                        String        @id @default(uuid()) @db.Uuid
+  organizationId            String        @map("organization_id") @db.Uuid
+  authorizationId           String        @map("authorization_id") @db.Uuid
+  campaignId                String        @map("campaign_id") @db.Uuid
+  companyId                 String        @map("company_id") @db.Uuid
+  phoneNumberId             String        @map("phone_number_id") @db.Uuid
+  allowlistId               String        @map("allowlist_id") @db.Uuid
+  callAttemptId             String?       @unique @map("call_attempt_id") @db.Uuid
+  idempotencyKey            String        @unique @map("idempotency_key")
+  provider                  String        @default("twilio")
+  providerCallId            String?       @unique @map("provider_call_id")
+  providerCallIdFingerprint String?       @map("provider_call_id_fingerprint")
+  state                     RealCallState @default(reserved)
+  dtmfResult                String?       @map("dtmf_result")
+  estimatedCostMinor        Int           @map("estimated_cost_minor")
+  finalCostMinor            Int?          @map("final_cost_minor")
+  reservedCostMinor         Int           @map("reserved_cost_minor")
+  currency                  String
+  providerUnknown           Boolean       @default(false) @map("provider_unknown")
+  emergencyCancelStatus     String?       @map("emergency_cancel_status")
+  sourceNumberApprovalId    String?       @map("source_number_approval_id") @db.Uuid
+  costSettlementStatus      String        @default("pending") @map("cost_settlement_status")
+  costSettlementAttempts    Int           @default(0) @map("cost_settlement_attempts")
+  costSettlementNextAt      DateTime?     @map("cost_settlement_next_at")
+  startedAt                 DateTime?     @map("started_at")
+  answeredAt                DateTime?     @map("answered_at")
+  endedAt                   DateTime?     @map("ended_at")
+  createdAt                 DateTime      @default(now()) @map("created_at")
+  updatedAt                 DateTime      @updatedAt @map("updated_at")
+
+  @@index([organizationId, state, createdAt])
+  @@index([authorizationId, createdAt])
+  @@map("real_call_executions")
+}
+
+model SourceNumberApproval {
+  id                   String    @id @default(uuid()) @db.Uuid
+  organizationId       String    @map("organization_id") @db.Uuid
+  provider             String    @default("twilio")
+  numberFingerprint    String    @map("number_fingerprint")
+  numberLastFour       String    @map("number_last_four")
+  verificationStatus   String    @default("pending") @map("verification_status")
+  ownershipEvidenceRef String    @default("") @map("ownership_evidence_ref")
+  verifiedBy           String?   @map("verified_by") @db.Uuid
+  verifiedAt           DateTime? @map("verified_at")
+  expiresAt            DateTime  @map("expires_at")
+  active               Boolean   @default(false)
+  createdBy            String    @map("created_by") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@unique([organizationId, provider, numberFingerprint])
+  @@index([organizationId, provider, active, expiresAt])
+  @@map("source_number_approvals")
+}
+
+model ProductionIncident {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  category         String
+  severity         String    @default("high")
+  status           String    @default("open")
+  entityType       String    @map("entity_type")
+  entityId         String?   @map("entity_id")
+  summary          String
+  sanitizedDetails Json      @default("{}") @map("sanitized_details")
+  assignedTo       String?   @map("assigned_to") @db.Uuid
+  dueAt            DateTime? @map("due_at")
+  resolvedBy       String?   @map("resolved_by") @db.Uuid
+  resolvedAt       DateTime? @map("resolved_at")
+  resolutionReason String?   @map("resolution_reason")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([organizationId, status, severity, createdAt(sort: Desc)])
+  @@index([organizationId, category, entityId])
+  @@map("production_incidents")
+}
+
+model RealtimeCallSession {
+  id                         String    @id @default(uuid()) @db.Uuid
+  organizationId             String    @map("organization_id") @db.Uuid
+  campaignId                 String    @map("campaign_id") @db.Uuid
+  executionId                String?   @map("execution_id") @db.Uuid
+  provider                   String    @default("fake")
+  providerSessionFingerprint String?   @map("provider_session_fingerprint")
+  streamFingerprint          String?   @map("stream_fingerprint")
+  status                     String    @default("reserved")
+  lastInboundSequence        Int       @default(-1) @map("last_inbound_sequence")
+  lastOutboundSequence       Int       @default(-1) @map("last_outbound_sequence")
+  activeGenerationId         String?   @map("active_generation_id")
+  resultCode                 String?   @map("result_code")
+  failureCode                String?   @map("failure_code")
+  inputAudioBytes            Int       @default(0) @map("input_audio_bytes")
+  outputAudioBytes           Int       @default(0) @map("output_audio_bytes")
+  inputTokens                Int       @default(0) @map("input_tokens")
+  outputTokens               Int       @default(0) @map("output_tokens")
+  startedAt                  DateTime? @map("started_at")
+  endedAt                    DateTime? @map("ended_at")
+  durationSeconds            Int?      @map("duration_seconds")
+  createdAt                  DateTime  @default(now()) @map("created_at")
+  updatedAt                  DateTime  @updatedAt @map("updated_at")
+
+  @@index([organizationId, status, createdAt(sort: Desc)])
+  @@index([executionId])
+  @@map("realtime_call_sessions")
+}
+
+model RealtimeCallEvent {
+  id                       String   @id @default(uuid()) @db.Uuid
+  organizationId           String   @map("organization_id") @db.Uuid
+  sessionId                String   @map("session_id") @db.Uuid
+  providerEventFingerprint String   @map("provider_event_fingerprint")
+  type                     String
+  monotonicSequence        Int      @map("monotonic_sequence")
+  sanitizedMetadata        Json     @default("{}") @map("sanitized_metadata")
+  occurredAt               DateTime @map("occurred_at")
+  receivedAt               DateTime @default(now()) @map("received_at")
+
+  @@unique([sessionId, providerEventFingerprint])
+  @@index([organizationId, sessionId, monotonicSequence])
+  @@index([receivedAt])
+  @@map("realtime_call_events")
+}
+
+model HumanFollowupTask {
+  id                      String    @id @default(uuid()) @db.Uuid
+  organizationId          String    @map("organization_id") @db.Uuid
+  campaignId              String    @map("campaign_id") @db.Uuid
+  executionId             String?   @map("execution_id") @db.Uuid
+  realtimeSessionId       String    @map("realtime_session_id") @db.Uuid
+  phoneNumberId           String    @map("phone_number_id") @db.Uuid
+  companyId               String?   @map("company_id") @db.Uuid
+  contactId               String?   @map("contact_id") @db.Uuid
+  channel                 String    @default("zoom_phone")
+  source                  String    @default("ai_realtime")
+  reasonCode              String    @default("other") @map("reason_code")
+  status                  String    @default("open")
+  priority                String    @default("normal")
+  requestedTimeWindowCode String    @map("requested_time_window_code")
+  noteCode                String    @map("note_code")
+  assigneeUserId          String?   @map("assignee_user_id") @db.Uuid
+  dueAt                   DateTime? @map("due_at")
+  assignedAt              DateTime? @map("assigned_at")
+  firstOpenedAt           DateTime? @map("first_opened_at")
+  firstAttemptedAt        DateTime? @map("first_attempted_at")
+  firstConnectedAt        DateTime? @map("first_connected_at")
+  snoozedUntil            DateTime? @map("snoozed_until")
+  attemptCount            Int       @default(0) @map("attempt_count")
+  outcomeCode             String?   @map("outcome_code")
+  nextActionCode          String?   @map("next_action_code")
+  nextActionAt            DateTime? @map("next_action_at")
+  zoomCallFingerprint     String?   @map("zoom_call_fingerprint")
+  note                    String?
+  version                 Int       @default(0)
+  maskedDestination       String    @map("masked_destination")
+  completedAt             DateTime? @map("completed_at")
+  appointmentId           String?   @map("appointment_id") @db.Uuid
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  @@unique([realtimeSessionId, channel])
+  @@index([organizationId, status, createdAt(sort: Desc)])
+  @@index([assigneeUserId, status])
+  @@index([organizationId, contactId, reasonCode, status], map: "human_followup_tasks_organization_id_contact_id_reason_code_sta")
+  @@index([organizationId, phoneNumberId, reasonCode, status], map: "human_followup_tasks_organization_id_phone_number_id_reason_cod")
+  @@index([organizationId, dueAt, status])
+  @@map("human_followup_tasks")
+}
+
+model FollowupAssignmentRule {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  mode             String   @default("none")
+  teamId           String?  @map("team_id") @db.Uuid
+  campaignId       String?  @map("campaign_id") @db.Uuid
+  fixedAssigneeId  String?  @map("fixed_assignee_id") @db.Uuid
+  roundRobinCursor Int      @default(0) @map("round_robin_cursor")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([organizationId, campaignId])
+  @@map("followup_assignment_rules")
+}
+
+model FollowupNotification {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid
+  taskId         String?   @map("task_id") @db.Uuid
+  type           String
+  dedupeKey      String    @unique @map("dedupe_key")
+  readAt         DateTime? @map("read_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([organizationId, userId, readAt, createdAt(sort: Desc)], map: "followup_notifications_organization_id_user_id_read_at_created_")
+  @@map("followup_notifications")
+}
+
+model FollowupAttempt {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  taskId         String   @map("task_id") @db.Uuid
+  idempotencyKey String   @map("idempotency_key")
+  resultCode     String   @map("result_code")
+  attemptedAt    DateTime @default(now()) @map("attempted_at")
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, taskId, attemptedAt])
+  @@map("followup_attempts")
+}
+
+model ZoomPhoneEvent {
+  id                     String   @id @default(uuid()) @db.Uuid
+  organizationId         String?  @map("organization_id") @db.Uuid
+  eventFingerprint       String   @unique @map("event_fingerprint")
+  zoomCallFingerprint    String?  @map("zoom_call_fingerprint")
+  zoomUserFingerprint    String?  @map("zoom_user_fingerprint")
+  destinationFingerprint String?  @map("destination_fingerprint")
+  direction              String?
+  normalizedResult       String?  @map("normalized_result")
+  status                 String   @default("received")
+  occurredAt             DateTime @map("occurred_at")
+  sanitizedMetadata      Json     @default("{}") @map("sanitized_metadata")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  @@index([organizationId, status, occurredAt])
+  @@map("zoom_phone_events")
+}
+
+model SalesHandoffCard {
+  id                        String    @id @default(uuid()) @db.Uuid
+  organizationId            String    @map("organization_id") @db.Uuid
+  campaignId                String    @map("campaign_id") @db.Uuid
+  executionId               String?   @map("execution_id") @db.Uuid
+  realtimeSessionId         String    @map("realtime_session_id") @db.Uuid
+  followupTaskId            String?   @map("followup_task_id") @db.Uuid
+  appointmentId             String?   @map("appointment_id") @db.Uuid
+  companyId                 String    @map("company_id") @db.Uuid
+  contactId                 String?   @map("contact_id") @db.Uuid
+  source                    String    @default("fake")
+  schemaVersion             Int       @default(1) @map("schema_version")
+  version                   Int       @default(1)
+  status                    String    @default("draft")
+  interestLevel             String    @default("unknown") @map("interest_level")
+  interestCodes             Json      @default("[]") @map("interest_codes")
+  painPointCodes            Json      @default("[]") @map("pain_point_codes")
+  objectionCodes            Json      @default("[]") @map("objection_codes")
+  decisionRole              String    @default("unknown") @map("decision_role")
+  timelineCode              String    @default("unknown") @map("timeline_code")
+  budgetSignal              String    @default("not_discussed") @map("budget_signal")
+  callbackRequested         Boolean   @default(false) @map("callback_requested")
+  callbackWindowCode        String?   @map("callback_window_code")
+  humanQuestionCodes        Json      @default("[]") @map("human_question_codes")
+  recommendedNextAction     String    @map("recommended_next_action")
+  confidenceBand            String    @map("confidence_band")
+  evidenceEventFingerprints Json      @default("[]") @map("evidence_event_fingerprints")
+  customerNeedSummary       String?   @map("customer_need_summary") @db.VarChar(200)
+  objectionSummary          String?   @map("objection_summary") @db.VarChar(200)
+  nextConversationHint      String?   @map("next_conversation_hint") @db.VarChar(200)
+  unansweredQuestionSummary String?   @map("unanswered_question_summary") @db.VarChar(200)
+  leadScore                 Int?      @map("lead_score")
+  scoreReasonCodes          Json      @default("[]") @map("score_reason_codes")
+  scoreRuleVersion          Int       @default(1) @map("score_rule_version")
+  finalizedAt               DateTime? @map("finalized_at")
+  expiresAt                 DateTime  @map("expires_at")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+
+  @@unique([realtimeSessionId, version])
+  @@index([organizationId, status, createdAt(sort: Desc)])
+  @@index([organizationId, followupTaskId])
+  @@index([expiresAt])
+  @@map("sales_handoff_cards")
+}
+
+model AppointmentPolicy {
+  id                          String    @id @default(uuid()) @db.Uuid
+  organizationId              String    @map("organization_id") @db.Uuid
+  name                        String
+  timezone                    String
+  meetingTypeCode             String    @map("meeting_type_code")
+  durationMinutes             Int       @map("duration_minutes")
+  bufferBeforeMinutes         Int       @default(0) @map("buffer_before_minutes")
+  bufferAfterMinutes          Int       @default(0) @map("buffer_after_minutes")
+  minimumNoticeMinutes        Int       @default(60) @map("minimum_notice_minutes")
+  maximumAdvanceDays          Int       @default(30) @map("maximum_advance_days")
+  holdTtlMinutes              Int       @default(10) @map("hold_ttl_minutes")
+  cancellationDeadlineMinutes Int       @default(60) @map("cancellation_deadline_minutes")
+  assignmentMode              String    @default("manual") @map("assignment_mode")
+  status                      String    @default("draft")
+  version                     Int
+  validFrom                   DateTime? @map("valid_from")
+  validUntil                  DateTime? @map("valid_until")
+  createdBy                   String    @map("created_by") @db.Uuid
+  publishedBy                 String?   @map("published_by") @db.Uuid
+  publishedAt                 DateTime? @map("published_at")
+  createdAt                   DateTime  @default(now()) @map("created_at")
+  updatedAt                   DateTime  @updatedAt @map("updated_at")
+
+  @@unique([organizationId, name, version])
+  @@index([organizationId, status])
+  @@map("appointment_policies")
+}
+
+model AvailabilityRule {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  timezone       String
+  weekday        Int
+  startLocalTime String    @map("start_local_time")
+  endLocalTime   String    @map("end_local_time")
+  effectiveFrom  DateTime? @map("effective_from") @db.Date
+  effectiveUntil DateTime? @map("effective_until") @db.Date
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([organizationId, userId, weekday, active])
+  @@map("availability_rules")
+}
+
+model AvailabilityException {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  date           DateTime  @db.Date
+  type           String
+  startAt        DateTime? @map("start_at")
+  endAt          DateTime? @map("end_at")
+  reasonCode     String    @map("reason_code")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([organizationId, userId, date])
+  @@map("availability_exceptions")
+}
+
+model Appointment {
+  id                       String    @id @default(uuid()) @db.Uuid
+  organizationId           String    @map("organization_id") @db.Uuid
+  campaignId               String    @map("campaign_id") @db.Uuid
+  companyId                String    @map("company_id") @db.Uuid
+  contactId                String?   @map("contact_id") @db.Uuid
+  executionId              String?   @map("execution_id") @db.Uuid
+  realtimeSessionId        String?   @map("realtime_session_id") @db.Uuid
+  handoffCardId            String?   @map("handoff_card_id") @db.Uuid
+  followupTaskId           String?   @map("followup_task_id") @db.Uuid
+  assigneeUserId           String    @map("assignee_user_id") @db.Uuid
+  policyVersionId          String    @map("policy_version_id") @db.Uuid
+  status                   String    @default("held")
+  startAt                  DateTime  @map("start_at")
+  endAt                    DateTime  @map("end_at")
+  busyStartAt              DateTime  @map("busy_start_at")
+  busyEndAt                DateTime  @map("busy_end_at")
+  displayTimezone          String    @map("display_timezone")
+  holdExpiresAt            DateTime? @map("hold_expires_at")
+  confirmationSource       String    @map("confirmation_source")
+  meetingTypeCode          String    @map("meeting_type_code")
+  locationType             String    @default("undecided") @map("location_type")
+  externalProvider         String    @default("none") @map("external_provider")
+  externalEventFingerprint String?   @map("external_event_fingerprint")
+  idempotencyKey           String    @map("idempotency_key")
+  version                  Int       @default(0)
+  confirmedAt              DateTime? @map("confirmed_at")
+  cancelledAt              DateTime? @map("cancelled_at")
+  completedAt              DateTime? @map("completed_at")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, assigneeUserId, startAt])
+  @@index([organizationId, status, holdExpiresAt])
+  @@map("appointments")
+}
+
+model AppointmentEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  organizationId    String   @map("organization_id") @db.Uuid
+  appointmentId     String   @map("appointment_id") @db.Uuid
+  type              String
+  actorType         String   @map("actor_type")
+  actorId           String?  @map("actor_id") @db.Uuid
+  reasonCode        String   @map("reason_code")
+  beforeStatus      String?  @map("before_status")
+  afterStatus       String?  @map("after_status")
+  sanitizedMetadata Json     @default("{}") @map("sanitized_metadata")
+  occurredAt        DateTime @default(now()) @map("occurred_at")
+
+  @@index([organizationId, appointmentId, occurredAt], map: "appointment_events_organization_id_appointment_id_occurred_at_i")
+  @@map("appointment_events")
+}
+
+model SalesHandoffFeedback {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  cardId         String   @map("card_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  verdict        String
+  fieldCode      String?  @map("field_code")
+  correctedCode  String?  @map("corrected_code")
+  reasonCode     String   @map("reason_code")
+  note           String?  @db.VarChar(200)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([organizationId, cardId, createdAt])
+  @@map("sales_handoff_feedback")
+}
+
+model HandoffSetting {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  version          Int
+  status           String    @default("draft")
+  schemaVersion    Int       @default(1) @map("schema_version")
+  scoreRuleVersion Int       @default(1) @map("score_rule_version")
+  allowedCodes     Json      @default("{}") @map("allowed_codes")
+  scoreRules       Json      @default("{}") @map("score_rules")
+  createdBy        String    @map("created_by") @db.Uuid
+  publishedBy      String?   @map("published_by") @db.Uuid
+  publishedAt      DateTime? @map("published_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([organizationId, version])
+  @@index([organizationId, status])
+  @@map("handoff_settings")
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@sales-ai/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/formbody": "8.0.2",
+    "@fastify/multipart": "^9.0.3",
+    "@fastify/websocket": "^11.3.0",
+    "@sales-ai/database": "workspace:*",
+    "@sales-ai/calendar-provider": "workspace:*",
+    "@sales-ai/human-calling-provider": "workspace:*",
+    "@sales-ai/realtime": "workspace:*",
+    "@sales-ai/shared": "workspace:*",
+    "@sales-ai/validation": "workspace:*",
+    "@sales-ai/voice-provider": "workspace:*",
+    "bullmq": "^5.52.2",
+    "csv-parse": "^6.1.0",
+    "fastify": "^5.3.3",
+    "fastify-raw-body": "^5.0.0",
+    "iconv-lite": "^0.6.3",
+    "ioredis": "^5.6.1",
+    "ws": "^8.21.1"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  }
+}

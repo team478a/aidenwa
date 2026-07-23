@@ -1,0 +1,1068 @@
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import multipart from '@fastify/multipart';
+import { Queue } from 'bullmq';
+import Redis from 'ioredis';
+import { parse } from 'csv-parse/sync';
+import iconv from 'iconv-lite';
+import { randomUUID } from 'node:crypto';
+import { Prisma, type PrismaClient, UserRole } from '@sales-ai/database';
+import {
+  normalizeCompanyName,
+  normalizeEmail,
+  normalizePhoneNumber,
+  neutralizeCsvFormula,
+} from '@sales-ai/shared/stage2';
+import {
+  companyIdsSchema,
+  companyInputSchema,
+  companyPatchSchema,
+  companyQuerySchema,
+  contactInputSchema,
+  contactPatchSchema,
+  idParamsSchema,
+  mappingSchema,
+  optOutCheckSchema,
+  optOutInputSchema,
+  phoneInputSchema,
+  phonePatchSchema,
+  releaseOptOutSchema,
+  salesListInputSchema,
+  salesListPatchSchema,
+  tagInputSchema,
+  tagPatchSchema,
+} from '@sales-ai/validation';
+import { requestMetadata, writeAudit } from './audit.js';
+import { checkOptOut, findDuplicateCandidates } from './stage2-services.js';
+import type { AuthContext } from './types.js';
+
+type Deps = {
+  prisma: PrismaClient;
+  env: {
+    REDIS_URL: string;
+    CSV_MAX_BYTES: number;
+    CSV_MAX_ROWS: number;
+    IMPORT_RETENTION_HOURS: number;
+    BULK_OPERATION_LIMIT: number;
+  };
+  authenticate(request: FastifyRequest, reply: FastifyReply): Promise<AuthContext | undefined>;
+  authorize(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    roles: readonly UserRole[],
+  ): Promise<AuthContext | undefined>;
+  verifyCsrf(request: FastifyRequest, reply: FastifyReply, auth: AuthContext): boolean;
+  error(reply: FastifyReply, code: number, key: string, message: string): unknown;
+};
+const detailInclude = {
+  owner: { select: { id: true, name: true, email: true } },
+  contacts: { where: { isDeleted: false } },
+  phoneNumbers: {
+    where: { isDeleted: false },
+    orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
+  },
+  companyTags: { include: { tag: true } },
+  listCompanies: { where: { removedAt: null }, include: { salesList: true } },
+  optOuts: { orderBy: { registeredAt: 'desc' as const } },
+};
+
+export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
+  const { prisma } = deps;
+  void app.register(multipart, { limits: { fileSize: deps.env.CSV_MAX_BYTES, files: 1 } });
+  const companyScope = (auth: AuthContext): Prisma.CompanyWhereInput => ({
+    organizationId: auth.organizationId,
+    isDeleted: false,
+    ...(auth.role === UserRole.sales ? { ownerUserId: auth.userId } : {}),
+  });
+  async function getCompany(auth: AuthContext, id: string) {
+    return prisma.company.findFirst({ where: { id, ...companyScope(auth) } });
+  }
+  async function mutationAuth(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    roles = [UserRole.admin, UserRole.manager, UserRole.sales],
+  ) {
+    const auth = await deps.authorize(request, reply, roles);
+    if (!auth || !deps.verifyCsrf(request, reply, auth)) return;
+    return auth;
+  }
+  async function validOwner(organizationId: string, id: string | null | undefined) {
+    if (!id) return true;
+    return Boolean(
+      await prisma.user.findFirst({ where: { id, organizationId, status: 'active' } }),
+    );
+  }
+
+  app.get('/api/v1/companies', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    const q = companyQuerySchema.parse(request.query);
+    const where: Prisma.CompanyWhereInput = {
+      ...companyScope(auth),
+      ...(q.q
+        ? {
+            OR: [
+              { name: { contains: q.q, mode: 'insensitive' } },
+              { normalizedName: { contains: normalizeCompanyName(q.q) } },
+            ],
+          }
+        : {}),
+      ...(q.phone
+        ? {
+            phoneNumbers: {
+              some: {
+                normalizedNumber: normalizePhoneNumber(q.phone).normalizedNumber,
+                isDeleted: false,
+              },
+            },
+          }
+        : {}),
+      ...(q.corporateNumber ? { corporateNumber: q.corporateNumber } : {}),
+      ...(q.domain ? { websiteUrl: { contains: q.domain, mode: 'insensitive' } } : {}),
+      ...(q.prefecture ? { prefecture: q.prefecture } : {}),
+      ...(q.city ? { city: { contains: q.city } } : {}),
+      ...(q.industry ? { industryName: { contains: q.industry } } : {}),
+      ...(q.salesStatus ? { salesStatus: q.salesStatus } : {}),
+      ...(q.ownerUserId ? { ownerUserId: q.ownerUserId } : {}),
+      ...(q.tagId ? { companyTags: { some: { tagId: q.tagId } } } : {}),
+      ...(q.isCustomer ? { isCustomer: q.isCustomer === 'true' } : {}),
+      ...(q.optOut
+        ? {
+            optOuts:
+              q.optOut === 'true' ? { some: { status: 'active' } } : { none: { status: 'active' } },
+          }
+        : {}),
+    };
+    const [total, companies] = await prisma.$transaction([
+      prisma.company.count({ where }),
+      prisma.company.findMany({
+        where,
+        include: {
+          owner: { select: { id: true, name: true } },
+          phoneNumbers: { where: { isDeleted: false }, orderBy: { isPrimary: 'desc' }, take: 1 },
+          contacts: { where: { isDeleted: false }, take: 1 },
+          companyTags: { include: { tag: true } },
+          optOuts: { where: { status: 'active' }, take: 1 },
+        },
+        orderBy: { [q.sortBy]: q.sortOrder },
+        skip: (q.page - 1) * q.pageSize,
+        take: q.pageSize,
+      }),
+    ]);
+    return {
+      companies,
+      pagination: {
+        page: q.page,
+        pageSize: q.pageSize,
+        total,
+        pages: Math.ceil(total / q.pageSize),
+      },
+    };
+  });
+  app.post('/api/v1/companies', async (request, reply) => {
+    const auth = await mutationAuth(request, reply);
+    if (!auth) return;
+    const input = companyInputSchema.parse(request.body);
+    if (!(await validOwner(auth.organizationId, input.ownerUserId)))
+      return deps.error(reply, 400, 'INVALID_OWNER', '担当営業が正しくありません');
+    if (auth.role === UserRole.sales && input.ownerUserId && input.ownerUserId !== auth.userId)
+      return deps.error(reply, 403, 'FORBIDDEN', '他の担当者へ割り当てできません');
+    const data: Prisma.CompanyUncheckedCreateInput = {
+      organizationId: auth.organizationId,
+      ...clean(input),
+      name: input.name,
+      normalizedName: normalizeCompanyName(input.name),
+      ownerUserId: auth.role === UserRole.sales ? auth.userId : input.ownerUserId,
+    };
+    const company = await prisma.company.create({ data });
+    await writeAudit(prisma, {
+      organizationId: auth.organizationId,
+      userId: auth.userId,
+      action: 'company.created',
+      entityType: 'company',
+      entityId: company.id,
+      afterData: company,
+      ...requestMetadata(request),
+    });
+    return reply.code(201).send({
+      company,
+      duplicateCandidates: await findDuplicateCandidates(
+        prisma,
+        auth.organizationId,
+        input,
+        company.id,
+      ),
+    });
+  });
+  app.get('/api/v1/companies/:id', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const company = await prisma.company.findFirst({
+      where: { id, ...companyScope(auth) },
+      include: detailInclude,
+    });
+    return company ? { company } : deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
+  });
+  app.patch('/api/v1/companies/:id', async (request, reply) => {
+    const auth = await mutationAuth(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const before = await getCompany(auth, id);
+    if (!before) return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
+    const input = companyPatchSchema.parse(request.body);
+    if (!(await validOwner(auth.organizationId, input.ownerUserId)))
+      return deps.error(reply, 400, 'INVALID_OWNER', '担当営業が正しくありません');
+    if (auth.role === UserRole.sales && input.ownerUserId && input.ownerUserId !== auth.userId)
+      return deps.error(reply, 403, 'FORBIDDEN', '担当営業を変更できません');
+    const company = await prisma.company.update({
+      where: { id },
+      data: {
+        ...clean(input),
+        ...(input.name ? { normalizedName: normalizeCompanyName(input.name) } : {}),
+      },
+    });
+    await writeAudit(prisma, {
+      organizationId: auth.organizationId,
+      userId: auth.userId,
+      action:
+        input.ownerUserId !== undefined && input.ownerUserId !== before.ownerUserId
+          ? 'company.owner_changed'
+          : 'company.updated',
+      entityType: 'company',
+      entityId: id,
+      beforeData: before,
+      afterData: company,
+      ...requestMetadata(request),
+    });
+    return { company };
+  });
+  app.delete('/api/v1/companies/:id', async (request, reply) => {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const before = await prisma.company.findFirst({
+      where: { id, organizationId: auth.organizationId, isDeleted: false },
+    });
+    if (!before) return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
+    const company = await prisma.company.update({ where: { id }, data: { isDeleted: true } });
+    await writeAudit(prisma, {
+      organizationId: auth.organizationId,
+      userId: auth.userId,
+      action: 'company.deleted',
+      entityType: 'company',
+      entityId: id,
+      beforeData: before,
+      afterData: company,
+      ...requestMetadata(request),
+    });
+    return reply.code(204).send();
+  });
+  app.get('/api/v1/companies/:id/duplicates', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const company = await getCompany(auth, id);
+    if (!company) return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
+    const phone = await prisma.phoneNumber.findFirst({
+      where: { companyId: id, organizationId: auth.organizationId, isDeleted: false },
+    });
+    return {
+      candidates: await findDuplicateCandidates(
+        prisma,
+        auth.organizationId,
+        { ...company, phone: phone?.rawNumber },
+        id,
+      ),
+      autoMerged: false,
+    };
+  });
+
+  app.get('/api/v1/companies/:id/contacts', async (request, reply) =>
+    childList(request, reply, 'contact'),
+  );
+  app.post('/api/v1/companies/:id/contacts', async (request, reply) => {
+    const auth = await mutationAuth(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    if (!(await getCompany(auth, id)))
+      return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
+    const input = contactInputSchema.parse(request.body);
+    const contact = await prisma.companyContact.create({
+      data: {
+        organizationId: auth.organizationId,
+        companyId: id,
+        ...clean(input),
+        email: normalizeEmail(input.email),
+      },
+    });
+    await auditChild(request, auth, 'contact.created', 'contact', contact.id, undefined, contact);
+    return reply.code(201).send({ contact });
+  });
+  app.patch('/api/v1/contacts/:id', async (request, reply) => updateContact(request, reply, false));
+  app.delete('/api/v1/contacts/:id', async (request, reply) => updateContact(request, reply, true));
+  app.get('/api/v1/companies/:id/phone-numbers', async (request, reply) =>
+    childList(request, reply, 'phone'),
+  );
+  app.post('/api/v1/companies/:id/phone-numbers', async (request, reply) => {
+    const auth = await mutationAuth(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    if (!(await getCompany(auth, id)))
+      return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
+    const input = phoneInputSchema.parse(request.body);
+    if (
+      input.contactId &&
+      !(await prisma.companyContact.findFirst({
+        where: {
+          id: input.contactId,
+          companyId: id,
+          organizationId: auth.organizationId,
+          isDeleted: false,
+        },
+      }))
+    )
+      return deps.error(reply, 400, 'INVALID_CONTACT', '担当者が正しくありません');
+    const normalized = normalizePhoneNumber(input.rawNumber);
+    const isCallable = input.type === 'fax' ? false : input.isCallable && normalized.isValid;
+    const phone = await prisma.$transaction(async (tx) => {
+      if (input.isPrimary)
+        await tx.phoneNumber.updateMany({
+          where: { organizationId: auth.organizationId, companyId: id, isDeleted: false },
+          data: { isPrimary: false },
+        });
+      return tx.phoneNumber.create({
+        data: {
+          organizationId: auth.organizationId,
+          companyId: id,
+          ...clean(input),
+          ...normalized,
+          isCallable,
+        },
+      });
+    });
+    await auditChild(request, auth, 'phone.created', 'phone_number', phone.id, undefined, phone);
+    return reply.code(201).send({
+      phoneNumber: phone,
+      duplicateCandidates: await findDuplicateCandidates(
+        prisma,
+        auth.organizationId,
+        { phone: input.rawNumber },
+        id,
+      ),
+    });
+  });
+  app.patch('/api/v1/phone-numbers/:id', async (request, reply) =>
+    updatePhone(request, reply, false),
+  );
+  app.delete('/api/v1/phone-numbers/:id', async (request, reply) =>
+    updatePhone(request, reply, true),
+  );
+
+  app.get('/api/v1/tags', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    return {
+      tags: await prisma.tag.findMany({
+        where: { organizationId: auth.organizationId },
+        include: { _count: { select: { companyTags: true } } },
+        orderBy: { name: 'asc' },
+      }),
+    };
+  });
+  app.post('/api/v1/tags', async (request, reply) => createManaged(request, reply, 'tag'));
+  app.patch('/api/v1/tags/:id', async (request, reply) =>
+    updateManaged(request, reply, 'tag', false),
+  );
+  app.delete('/api/v1/tags/:id', async (request, reply) =>
+    updateManaged(request, reply, 'tag', true),
+  );
+  app.get('/api/v1/companies/:id/tags', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    if (!(await getCompany(auth, id)))
+      return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
+    return {
+      tags: await prisma.companyTag.findMany({ where: { companyId: id }, include: { tag: true } }),
+    };
+  });
+  app.post('/api/v1/companies/:id/tags', async (request, reply) => {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const { id: tagId } = idParamsSchema.parse({
+      id: (request.body as { tagId?: unknown }).tagId,
+    });
+    if (
+      !(await prisma.company.findFirst({
+        where: { id, organizationId: auth.organizationId, isDeleted: false },
+      })) ||
+      !(await prisma.tag.findFirst({ where: { id: tagId, organizationId: auth.organizationId } }))
+    )
+      return deps.error(reply, 404, 'NOT_FOUND', '企業またはタグが見つかりません');
+    const relation = await prisma.companyTag.upsert({
+      where: { companyId_tagId: { companyId: id, tagId } },
+      update: {},
+      create: { companyId: id, tagId, assignedBy: auth.userId },
+    });
+    await auditChild(request, auth, 'company.tag_added', 'company', id, undefined, { tagId });
+    return reply.code(201).send({ companyTag: relation });
+  });
+  app.delete('/api/v1/companies/:id/tags/:tagId', async (request, reply) => {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    const { id, tagId } = request.params as { id: string; tagId: string };
+    const company = await prisma.company.findFirst({
+      where: { id, organizationId: auth.organizationId },
+    });
+    const tag = await prisma.tag.findFirst({
+      where: { id: tagId, organizationId: auth.organizationId },
+    });
+    if (!company || !tag)
+      return deps.error(reply, 404, 'NOT_FOUND', '企業またはタグが見つかりません');
+    await prisma.companyTag.deleteMany({ where: { companyId: id, tagId } });
+    await auditChild(request, auth, 'company.tag_removed', 'company', id, { tagId }, undefined);
+    return reply.code(204).send();
+  });
+
+  app.get('/api/v1/sales-lists', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    return {
+      salesLists: await prisma.salesList.findMany({
+        where: { organizationId: auth.organizationId, isDeleted: false },
+        include: {
+          creator: { select: { id: true, name: true } },
+          _count: { select: { companies: { where: { removedAt: null } } } },
+        },
+        orderBy: { updatedAt: 'desc' },
+      }),
+    };
+  });
+  app.post('/api/v1/sales-lists', async (request, reply) => createManaged(request, reply, 'list'));
+  app.get('/api/v1/sales-lists/:id', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const salesList = await prisma.salesList.findFirst({
+      where: { id, organizationId: auth.organizationId, isDeleted: false },
+    });
+    return salesList
+      ? { salesList }
+      : deps.error(reply, 404, 'NOT_FOUND', 'リストが見つかりません');
+  });
+  app.patch('/api/v1/sales-lists/:id', async (request, reply) =>
+    updateManaged(request, reply, 'list', false),
+  );
+  app.delete('/api/v1/sales-lists/:id', async (request, reply) =>
+    updateManaged(request, reply, 'list', true),
+  );
+  app.get('/api/v1/sales-lists/:id/companies', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const list = await prisma.salesList.findFirst({
+      where: { id, organizationId: auth.organizationId, isDeleted: false },
+    });
+    if (!list) return deps.error(reply, 404, 'NOT_FOUND', 'リストが見つかりません');
+    return {
+      companies: await prisma.salesListCompany.findMany({
+        where: { salesListId: id, removedAt: null },
+        include: { company: true },
+      }),
+    };
+  });
+  app.post('/api/v1/sales-lists/:id/companies', async (request, reply) =>
+    listCompanies(request, reply, false),
+  );
+  app.delete('/api/v1/sales-lists/:id/companies/:companyId', async (request, reply) =>
+    listCompanies(request, reply, true),
+  );
+  app.post('/api/v1/sales-lists/:id/preview', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const list = await prisma.salesList.findFirst({
+      where: { id, organizationId: auth.organizationId, isDeleted: false },
+    });
+    if (!list) return deps.error(reply, 404, 'NOT_FOUND', 'リストが見つかりません');
+    const filters = companyQuerySchema.partial().parse(list.filterConditions);
+    return {
+      companies: await prisma.company.findMany({
+        where: {
+          ...companyScope(auth),
+          ...(filters.q ? { normalizedName: { contains: normalizeCompanyName(filters.q) } } : {}),
+          ...(filters.salesStatus ? { salesStatus: filters.salesStatus } : {}),
+        },
+        take: 100,
+      }),
+      limited: true,
+    };
+  });
+
+  app.get('/api/v1/opt-outs', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    return {
+      optOuts: await prisma.optOut.findMany({
+        where: {
+          organizationId: auth.organizationId,
+          ...(auth.role === UserRole.sales ? { company: { ownerUserId: auth.userId } } : {}),
+        },
+        include: {
+          company: { select: { id: true, name: true } },
+          phoneNumber: true,
+          contact: true,
+          registrar: { select: { id: true, name: true } },
+          releaser: { select: { id: true, name: true } },
+        },
+        orderBy: { registeredAt: 'desc' },
+        take: 500,
+      }),
+    };
+  });
+  app.post('/api/v1/opt-outs', async (request, reply) => {
+    const auth = await mutationAuth(request, reply);
+    if (!auth) return;
+    const input = optOutInputSchema.parse(request.body);
+    let company = input.companyId ? await getCompany(auth, input.companyId) : null;
+    const phone = input.phoneNumberId
+      ? await prisma.phoneNumber.findFirst({
+          where: { id: input.phoneNumberId, organizationId: auth.organizationId },
+        })
+      : null;
+    const contact = input.contactId
+      ? await prisma.companyContact.findFirst({
+          where: { id: input.contactId, organizationId: auth.organizationId },
+        })
+      : null;
+    if (input.companyId && !company)
+      return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
+    if (phone && !company) company = await getCompany(auth, phone.companyId);
+    if (contact && !company) company = await getCompany(auth, contact.companyId);
+    if (auth.role === UserRole.sales && !company)
+      return deps.error(reply, 403, 'FORBIDDEN', '担当企業のみ登録できます');
+    const optOut = await prisma.optOut.create({
+      data: {
+        organizationId: auth.organizationId,
+        companyId: company?.id,
+        phoneNumberId: phone?.id,
+        contactId: contact?.id,
+        normalizedPhoneSnapshot:
+          phone?.normalizedNumber ??
+          (input.phone ? normalizePhoneNumber(input.phone).normalizedNumber : null),
+        emailSnapshot: contact?.email ?? normalizeEmail(input.email),
+        scope: input.scope,
+        channel: input.channel,
+        reasonCode: input.reasonCode,
+        reasonText: input.reasonText,
+        evidenceText: input.evidenceText,
+        registeredBy: auth.userId,
+      },
+    });
+    if (company)
+      await prisma.company.update({ where: { id: company.id }, data: { salesStatus: 'opt_out' } });
+    await auditChild(request, auth, 'opt_out.created', 'opt_out', optOut.id, undefined, optOut);
+    return reply.code(201).send({ optOut });
+  });
+  app.get('/api/v1/opt-outs/check', async (request, reply) => {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    const input = optOutCheckSchema.parse(request.query);
+    if (
+      auth.role === UserRole.sales &&
+      input.companyId &&
+      !(await getCompany(auth, input.companyId))
+    )
+      return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
+    return checkOptOut(prisma, auth.organizationId, input);
+  });
+  app.post('/api/v1/opt-outs/:id/release', async (request, reply) => {
+    const auth = await mutationAuth(request, reply, [UserRole.admin]);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const { releaseReason } = releaseOptOutSchema.parse(request.body);
+    const before = await prisma.optOut.findFirst({
+      where: { id, organizationId: auth.organizationId, status: 'active' },
+    });
+    if (!before) return deps.error(reply, 404, 'NOT_FOUND', '営業禁止が見つかりません');
+    const optOut = await prisma.optOut.update({
+      where: { id },
+      data: { status: 'released', releasedBy: auth.userId, releasedAt: new Date(), releaseReason },
+    });
+    await auditChild(request, auth, 'opt_out.released', 'opt_out', id, before, optOut);
+    return { optOut };
+  });
+
+  app.post('/api/v1/imports/companies/upload', async (request, reply) => {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    const file = await request.file();
+    if (!file || !file.filename.toLowerCase().endsWith('.csv'))
+      return deps.error(reply, 400, 'INVALID_FILE', 'CSVファイルを選択してください');
+    const buffer = await file.toBuffer();
+    if (buffer.length > deps.env.CSV_MAX_BYTES)
+      return deps.error(reply, 413, 'FILE_TOO_LARGE', 'ファイルサイズ上限を超えています');
+    const encoding = String(
+      file.fields.encoding && 'value' in file.fields.encoding ? file.fields.encoding.value : 'utf8',
+    ).toLowerCase();
+    let text: string;
+    try {
+      text =
+        encoding === 'cp932' || encoding === 'shift_jis'
+          ? iconv.decode(buffer, 'cp932')
+          : buffer.toString('utf8').replace(/^\uFEFF/u, '');
+    } catch {
+      return deps.error(reply, 400, 'ENCODING_ERROR', '文字コードを変換できません');
+    }
+    let records: Record<string, string>[];
+    try {
+      records = parse(text, {
+        columns: true,
+        skip_empty_lines: true,
+        relax_quotes: false,
+        bom: true,
+        trim: true,
+      });
+    } catch {
+      return deps.error(reply, 400, 'CSV_PARSE_ERROR', 'CSV形式を解析できません');
+    }
+    if (records.length > deps.env.CSV_MAX_ROWS)
+      return deps.error(reply, 413, 'TOO_MANY_ROWS', 'CSV行数上限を超えています');
+    const job = await prisma.importJob.create({
+      data: {
+        organizationId: auth.organizationId,
+        originalFileName: file.filename.replace(/[\r\n]/gu, '_'),
+        storageKey: `db://${randomUUID()}`,
+        encoding,
+        status: 'mapping_required',
+        totalRows: records.length,
+        createdBy: auth.userId,
+        expiresAt: new Date(Date.now() + deps.env.IMPORT_RETENTION_HOURS * 3_600_000),
+        rows: {
+          create: records.map((record, index) => ({
+            rowNumber: index + 2,
+            rawData: sanitizeCsvRecord(record),
+            normalizedData: {},
+            validationErrors: [],
+          })),
+        },
+      },
+    });
+    await auditChild(request, auth, 'import.uploaded', 'import_job', job.id, undefined, {
+      originalFileName: job.originalFileName,
+      totalRows: job.totalRows,
+      encoding,
+    });
+    return reply.code(201).send({ importJob: job, headers: Object.keys(records[0] ?? {}) });
+  });
+  app.post('/api/v1/imports/companies/:id/mapping', async (request, reply) => {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const input = mappingSchema.parse(request.body);
+    const job = await prisma.importJob.findFirst({
+      where: { id, organizationId: auth.organizationId },
+    });
+    if (!job) return deps.error(reply, 404, 'NOT_FOUND', 'インポートが見つかりません');
+    const rows = await prisma.importRow.findMany({
+      where: { importJobId: id },
+      orderBy: { rowNumber: 'asc' },
+    });
+    let valid = 0;
+    let errors = 0;
+    for (const row of rows) {
+      const raw = row.rawData as Record<string, string>;
+      const normalized = Object.fromEntries(
+        Object.entries(input.mapping).map(([field, column]) => [
+          field,
+          neutralizeCsvFormula(raw[column] ?? ''),
+        ]),
+      );
+      const validationErrors = normalized.name?.trim() ? [] : ['name_required'];
+      if (!validationErrors.length) valid += 1;
+      else errors += 1;
+      const candidates = validationErrors.length
+        ? []
+        : await findDuplicateCandidates(prisma, auth.organizationId, {
+            name: normalized.name,
+            corporateNumber: normalized.corporateNumber,
+            phone: normalized.phone,
+            websiteUrl: normalized.websiteUrl,
+            address: normalized.address,
+          });
+      await prisma.importRow.update({
+        where: { id: row.id },
+        data: {
+          normalizedData: normalized,
+          validationErrors,
+          duplicateCandidates: candidates,
+          action: validationErrors.length
+            ? 'error'
+            : candidates.length
+              ? 'review'
+              : input.duplicatePolicy,
+        },
+      });
+    }
+    const updated = await prisma.importJob.update({
+      where: { id },
+      data: {
+        mapping: input.mapping,
+        duplicatePolicy: input.duplicatePolicy,
+        validRows: valid,
+        errorRows: errors,
+        status: 'preview_ready',
+      },
+    });
+    return { importJob: updated };
+  });
+  app.get('/api/v1/imports/companies/:id/preview', async (request, reply) =>
+    importRead(request, reply, 'preview'),
+  );
+  app.get('/api/v1/imports/companies/:id/status', async (request, reply) =>
+    importRead(request, reply, 'status'),
+  );
+  app.get('/api/v1/imports/companies/:id/errors', async (request, reply) =>
+    importRead(request, reply, 'errors'),
+  );
+  app.post('/api/v1/imports/companies/:id/execute', async (request, reply) => {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const job = await prisma.importJob.findFirst({
+      where: { id, organizationId: auth.organizationId },
+    });
+    if (!job) return deps.error(reply, 404, 'NOT_FOUND', 'インポートが見つかりません');
+    if (!['preview_ready', 'queued'].includes(job.status))
+      return deps.error(reply, 409, 'INVALID_STATE', '実行できない状態です');
+    await prisma.importJob.update({ where: { id }, data: { status: 'queued' } });
+    const connection = new Redis(deps.env.REDIS_URL, { maxRetriesPerRequest: null });
+    const queue = new Queue('sales-ai-jobs', { connection });
+    try {
+      await queue.add(
+        'company-import',
+        { importJobId: id, organizationId: auth.organizationId },
+        { jobId: `company-import-${id}`, removeOnComplete: 100, removeOnFail: 100 },
+      );
+    } finally {
+      await queue.close();
+      connection.disconnect();
+    }
+    await auditChild(request, auth, 'import.executed', 'import_job', id, undefined, {
+      status: 'queued',
+      totalRows: job.totalRows,
+    });
+    return reply.code(202).send({ importJobId: id, status: 'queued' });
+  });
+  app.post('/api/v1/imports/companies/:id/cancel', async (request, reply) => {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const result = await prisma.importJob.updateMany({
+      where: {
+        id,
+        organizationId: auth.organizationId,
+        status: { in: ['uploaded', 'mapping_required', 'preview_ready', 'queued'] },
+      },
+      data: { status: 'cancelled', completedAt: new Date() },
+    });
+    if (!result.count) return deps.error(reply, 409, 'INVALID_STATE', 'キャンセルできません');
+    await auditChild(request, auth, 'import.cancelled', 'import_job', id, undefined, {
+      status: 'cancelled',
+    });
+    return { status: 'cancelled' };
+  });
+
+  async function childList(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    kind: 'contact' | 'phone',
+  ) {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    if (!(await getCompany(auth, id)))
+      return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
+    return kind === 'contact'
+      ? {
+          contacts: await prisma.companyContact.findMany({
+            where: { organizationId: auth.organizationId, companyId: id, isDeleted: false },
+          }),
+        }
+      : {
+          phoneNumbers: await prisma.phoneNumber.findMany({
+            where: { organizationId: auth.organizationId, companyId: id, isDeleted: false },
+          }),
+        };
+  }
+  async function updateContact(request: FastifyRequest, reply: FastifyReply, deleted: boolean) {
+    const auth = await mutationAuth(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const before = await prisma.companyContact.findFirst({
+      where: { id, organizationId: auth.organizationId, isDeleted: false },
+      include: { company: true },
+    });
+    if (!before || !(await getCompany(auth, before.companyId)))
+      return deps.error(reply, 404, 'NOT_FOUND', '担当者が見つかりません');
+    const input = deleted ? {} : contactPatchSchema.parse(request.body);
+    const contact = await prisma.companyContact.update({
+      where: { id },
+      data: deleted
+        ? { isDeleted: true }
+        : {
+            ...clean(input),
+            email: input.email === undefined ? undefined : normalizeEmail(input.email),
+          },
+    });
+    await auditChild(
+      request,
+      auth,
+      deleted ? 'contact.deleted' : 'contact.updated',
+      'contact',
+      id,
+      before,
+      contact,
+    );
+    return deleted ? reply.code(204).send() : { contact };
+  }
+  async function updatePhone(request: FastifyRequest, reply: FastifyReply, deleted: boolean) {
+    const auth = await mutationAuth(request, reply);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const before = await prisma.phoneNumber.findFirst({
+      where: { id, organizationId: auth.organizationId, isDeleted: false },
+    });
+    if (!before || !(await getCompany(auth, before.companyId)))
+      return deps.error(reply, 404, 'NOT_FOUND', '電話番号が見つかりません');
+    const input = deleted ? {} : phonePatchSchema.parse(request.body);
+    if (
+      input.contactId &&
+      !(await prisma.companyContact.findFirst({
+        where: {
+          id: input.contactId,
+          organizationId: auth.organizationId,
+          companyId: before.companyId,
+          isDeleted: false,
+        },
+      }))
+    )
+      return deps.error(reply, 400, 'INVALID_CONTACT', '担当者が正しくありません');
+    const normalized = input.rawNumber ? normalizePhoneNumber(input.rawNumber) : {};
+    const type = input.type ?? before.type;
+    const isCallable = type === 'fax' ? false : input.isCallable;
+    const phone = await prisma.$transaction(async (tx) => {
+      if (input.isPrimary)
+        await tx.phoneNumber.updateMany({
+          where: { companyId: before.companyId, isDeleted: false },
+          data: { isPrimary: false },
+        });
+      return tx.phoneNumber.update({
+        where: { id },
+        data: deleted
+          ? { isDeleted: true, isPrimary: false }
+          : { ...clean(input), ...normalized, ...(isCallable !== undefined ? { isCallable } : {}) },
+      });
+    });
+    await auditChild(
+      request,
+      auth,
+      deleted ? 'phone.deleted' : 'phone.updated',
+      'phone_number',
+      id,
+      before,
+      phone,
+    );
+    return deleted ? reply.code(204).send() : { phoneNumber: phone };
+  }
+  async function createManaged(request: FastifyRequest, reply: FastifyReply, kind: 'tag' | 'list') {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    if (kind === 'tag') {
+      const input = tagInputSchema.parse(request.body);
+      const tag = await prisma.tag.create({
+        data: { organizationId: auth.organizationId, ...clean(input) },
+      });
+      await auditChild(request, auth, 'tag.created', 'tag', tag.id, undefined, tag);
+      return reply.code(201).send({ tag });
+    }
+    const input = salesListInputSchema.parse(request.body);
+    const list = await prisma.salesList.create({
+      data: {
+        organizationId: auth.organizationId,
+        createdBy: auth.userId,
+        ...clean(input),
+        filterConditions: input.filterConditions,
+      },
+    });
+    await auditChild(request, auth, 'sales_list.created', 'sales_list', list.id, undefined, list);
+    return reply.code(201).send({ salesList: list });
+  }
+  async function updateManaged(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    kind: 'tag' | 'list',
+    deleted: boolean,
+  ) {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    if (kind === 'tag') {
+      const before = await prisma.tag.findFirst({
+        where: { id, organizationId: auth.organizationId },
+      });
+      if (!before) return deps.error(reply, 404, 'NOT_FOUND', 'タグが見つかりません');
+      if (deleted && (await prisma.companyTag.count({ where: { tagId: id } })))
+        return deps.error(reply, 409, 'TAG_IN_USE', '使用中タグは削除できません');
+      const tag = deleted
+        ? await prisma.tag.delete({ where: { id } })
+        : await prisma.tag.update({
+            where: { id },
+            data: clean(tagPatchSchema.parse(request.body)),
+          });
+      await auditChild(
+        request,
+        auth,
+        deleted ? 'tag.deleted' : 'tag.updated',
+        'tag',
+        id,
+        before,
+        deleted ? undefined : tag,
+      );
+      return deleted ? reply.code(204).send() : { tag };
+    }
+    const before = await prisma.salesList.findFirst({
+      where: { id, organizationId: auth.organizationId, isDeleted: false },
+    });
+    if (!before) return deps.error(reply, 404, 'NOT_FOUND', 'リストが見つかりません');
+    const input = deleted ? {} : salesListPatchSchema.parse(request.body);
+    const list = await prisma.salesList.update({
+      where: { id },
+      data: deleted
+        ? { isDeleted: true }
+        : {
+            ...clean(input),
+            ...(input.filterConditions
+              ? { filterConditions: input.filterConditions as Prisma.InputJsonValue }
+              : {}),
+          },
+    });
+    await auditChild(
+      request,
+      auth,
+      deleted ? 'sales_list.deleted' : 'sales_list.updated',
+      'sales_list',
+      id,
+      before,
+      list,
+    );
+    return deleted ? reply.code(204).send() : { salesList: list };
+  }
+  async function listCompanies(request: FastifyRequest, reply: FastifyReply, remove: boolean) {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    const params = request.params as { id: string; companyId?: string };
+    const list = await prisma.salesList.findFirst({
+      where: { id: params.id, organizationId: auth.organizationId, isDeleted: false },
+    });
+    if (!list) return deps.error(reply, 404, 'NOT_FOUND', 'リストが見つかりません');
+    const companyIds = remove
+      ? [String(params.companyId)]
+      : companyIdsSchema.parse(request.body).companyIds;
+    if (companyIds.length > deps.env.BULK_OPERATION_LIMIT)
+      return deps.error(reply, 413, 'BULK_LIMIT', '一括操作上限を超えています');
+    const existing = await prisma.company.findMany({
+      where: { id: { in: companyIds }, organizationId: auth.organizationId, isDeleted: false },
+      select: { id: true },
+    });
+    const valid = new Set(existing.map((item) => item.id));
+    const results = [];
+    for (const companyId of companyIds) {
+      if (!valid.has(companyId)) {
+        results.push({ companyId, success: false, error: 'not_found' });
+        continue;
+      }
+      if (remove)
+        await prisma.salesListCompany.updateMany({
+          where: { salesListId: params.id, companyId, removedAt: null },
+          data: { removedAt: new Date() },
+        });
+      else
+        await prisma.salesListCompany.upsert({
+          where: { salesListId_companyId: { salesListId: params.id, companyId } },
+          update: { removedAt: null, addedBy: auth.userId, addedAt: new Date() },
+          create: { salesListId: params.id, companyId, addedBy: auth.userId },
+        });
+      results.push({ companyId, success: true });
+    }
+    await auditChild(
+      request,
+      auth,
+      remove ? 'sales_list.company_removed' : 'sales_list.company_added',
+      'sales_list',
+      params.id,
+      undefined,
+      { count: results.filter((item) => item.success).length },
+    );
+    return { results };
+  }
+  async function importRead(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    mode: 'preview' | 'status' | 'errors',
+  ) {
+    const auth = await deps.authenticate(request, reply);
+    if (!auth || auth.role === UserRole.sales)
+      return auth ? deps.error(reply, 403, 'FORBIDDEN', 'インポート権限がありません') : undefined;
+    const { id } = idParamsSchema.parse(request.params);
+    const job = await prisma.importJob.findFirst({
+      where: { id, organizationId: auth.organizationId },
+    });
+    if (!job) return deps.error(reply, 404, 'NOT_FOUND', 'インポートが見つかりません');
+    if (mode === 'status') return { importJob: job };
+    return {
+      importJob: job,
+      rows: await prisma.importRow.findMany({
+        where: {
+          importJobId: id,
+          ...(mode === 'errors' ? { NOT: { validationErrors: { equals: [] } } } : {}),
+        },
+        orderBy: { rowNumber: 'asc' },
+        take: mode === 'preview' ? 100 : 1000,
+      }),
+    };
+  }
+  async function auditChild(
+    request: FastifyRequest,
+    auth: AuthContext,
+    action: string,
+    entityType: string,
+    entityId: string,
+    beforeData?: unknown,
+    afterData?: unknown,
+  ) {
+    await writeAudit(prisma, {
+      organizationId: auth.organizationId,
+      userId: auth.userId,
+      action,
+      entityType,
+      entityId,
+      beforeData,
+      afterData,
+      ...requestMetadata(request),
+    });
+  }
+}
+
+function clean<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
+}
+function sanitizeCsvRecord(record: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(record).map(([key, value]) => [
+      neutralizeCsvFormula(key),
+      neutralizeCsvFormula(String(value)),
+    ]),
+  );
+}

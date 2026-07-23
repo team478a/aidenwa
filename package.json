@@ -1,0 +1,41 @@
+{
+  "name": "sales-ai-os",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.10.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @sales-ai/web --filter @sales-ai/api --filter @sales-ai/worker dev",
+    "dev:web": "pnpm --filter @sales-ai/web dev",
+    "dev:api": "pnpm --filter @sales-ai/api dev",
+    "dev:worker": "pnpm --filter @sales-ai/worker dev",
+    "build": "pnpm -r --if-present build",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "db:generate": "pnpm --filter @sales-ai/database db:generate",
+    "db:migrate": "pnpm --filter @sales-ai/database db:migrate",
+    "db:seed": "pnpm --filter @sales-ai/database db:seed",
+    "db:seed:e2e": "cross-env SEED_SYSTEM_ADMIN_PASSWORD=Stage4A-E2E-System! SEED_ADMIN_PASSWORD=Stage1-E2E-Admin! SEED_MANAGER_PASSWORD=Stage1-E2E-Manager! SEED_SALES_PASSWORD=Stage1-E2E-Sales! pnpm db:seed",
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.27.0",
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.15.21",
+    "cross-env": "^7.0.3",
+    "eslint": "^9.27.0",
+    "globals": "^16.1.0",
+    "prettier": "^3.5.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.1",
+    "vitest": "^3.1.4"
+  }
+}

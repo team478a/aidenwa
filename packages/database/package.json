@@ -1,0 +1,24 @@
+{
+  "name": "@sales-ai/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.8.2",
+    "@sales-ai/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "prisma": "^6.8.2",
+    "tsx": "^4.19.4"
+  }
+}
