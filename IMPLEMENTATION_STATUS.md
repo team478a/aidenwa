@@ -235,6 +235,30 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - `CALL_EVENT_RETENTION_DAYS=90`
 - Stage 0〜2の`DATABASE_URL`, `REDIS_URL`, CSV/Session設定も継続
 
+## Maintainability remediation Phase 2
+
+- Status: atomicity/retry subset locally verified; Phase 2 performance acceptance remains open.
+- ImportRow now separates requested `action` from `pending/processing/success/skipped/failed`
+  processing results.
+- Each row rechecks duplicates and atomically commits company, phone, contact, result and audit.
+- Worker processing uses bounded 200-row pages, continues after row failure and stops on
+  cancellation.
+- Failed-row retry preserves successful rows and creates a fresh Outbox delivery.
+- CSV formula neutralization and organization scope remain enforced.
+- Focused DB tests: 3/3 PASS.
+- Prisma format/validate/generate, all 13 migrations on an empty DB, seed and zero schema drift:
+  PASS.
+- lint/format/typecheck: PASS.
+- Unit/API/Worker: 25 files, 104 tests PASS.
+- Existing E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- GitHub Actions: pending until push.
+- Remaining before Phase 2 completion: move post-mapping row normalization/duplicate preparation out
+  of the API request, add a 10,000-row non-blocking performance test, and verify bounded-memory CSV
+  parsing.
+- Phase 3 and later: not started by this change.
+- External Provider/API/real telephone calls: 0.
+
 ## Temporary implementation / known issues
 
 - Stage 4B-2は接続コードとFake Transport検証まで完了しています。外部設定、書面承認、実Provider疎通、総合監査は未完了です。

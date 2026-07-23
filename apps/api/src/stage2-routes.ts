@@ -696,6 +696,12 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
           normalizedData: normalized,
           validationErrors,
           duplicateCandidates: candidates,
+          processingStatus: 'pending',
+          attemptCount: 0,
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          processedAt: null,
+          resultCompanyId: null,
           action: validationErrors.length
             ? 'error'
             : candidates.length
@@ -750,6 +756,51 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
       totalRows: job.totalRows,
     });
     return reply.code(202).send({ importJobId: id, status: 'queued' });
+  });
+  app.post('/api/v1/imports/companies/:id/retry-failed', async (request, reply) => {
+    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const job = await prisma.importJob.findFirst({
+      where: { id, organizationId: auth.organizationId },
+    });
+    if (!job) return deps.error(reply, 404, 'NOT_FOUND', 'インポートが見つかりません');
+    if (!['completed_with_errors', 'failed'].includes(job.status))
+      return deps.error(reply, 409, 'INVALID_STATE', '失敗行を再実行できない状態です');
+
+    const failedCount = await prisma.importRow.count({
+      where: { importJobId: id, processingStatus: 'failed' },
+    });
+    if (!failedCount)
+      return deps.error(reply, 409, 'NO_FAILED_ROWS', '再実行対象の失敗行がありません');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.importRow.updateMany({
+        where: { importJobId: id, processingStatus: 'failed' },
+        data: {
+          processingStatus: 'pending',
+          processedAt: null,
+          lastErrorCode: null,
+          lastErrorMessage: null,
+        },
+      });
+      await tx.importJob.update({
+        where: { id },
+        data: { status: 'queued', completedAt: null, errorMessage: null },
+      });
+      await enqueueOutbox(tx, {
+        organizationId: auth.organizationId,
+        eventType: 'company-import',
+        aggregateType: 'import_job_retry',
+        aggregateId: randomUUID(),
+        payload: { importJobId: id, organizationId: auth.organizationId },
+      });
+    });
+    await auditChild(request, auth, 'import.failed_rows_retried', 'import_job', id, undefined, {
+      status: 'queued',
+      failedRows: failedCount,
+    });
+    return reply.code(202).send({ importJobId: id, status: 'queued', failedRows: failedCount });
   });
   app.post('/api/v1/imports/companies/:id/cancel', async (request, reply) => {
     const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);

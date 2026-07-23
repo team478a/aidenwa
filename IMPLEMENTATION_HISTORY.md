@@ -187,3 +187,19 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Verified all 12 migrations and seed on an empty database with zero Prisma drift, 101 Unit/API/Worker tests, 8 E2E tests, static checks and all production builds.
 - GitHub Actions run `30030010473` passed every required CI step for implementation commit `d5371a2`.
 - Kept all external integration flags false and made zero real telephone or external Provider calls.
+
+## 2026-07-24 — Maintainability remediation Phase 2
+
+- Added migration `20260724020000_phase2_atomic_import_rows` with explicit row processing state,
+  attempts, sanitized error fields and a recovery index.
+- Extracted company import execution from the Worker bootstrap into a bounded batch processor.
+- Made duplicate recheck, company/phone/contact mutation, ImportRow success and row audit a single
+  transaction.
+- Added per-row failure isolation and cancellation checks so one failed row does not stop later
+  rows.
+- Added a failed-row-only retry API that preserves successful rows and schedules a fresh
+  transactional Outbox event.
+- Added focused DB tests for rollback after company creation, failed-row retry without successful
+  row duplication, and mixed success/failure completion.
+- Added the import recovery runbook. Phase 3 and later were not changed.
+- Kept all external integration flags false and made zero real telephone or external Provider calls.

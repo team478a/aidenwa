@@ -40,3 +40,41 @@ Focused coverage includes transaction rollback, Queue failure and redelivery, st
 ### Remaining phases
 
 CSV row atomicity, call/target state machines, usage ledger, production environment fail-fast, appointment state machine, webhook retry, scheduled maintenance migration, and incremental module splitting remain explicitly out of scope for Phase 1.
+
+## Phase 2 — Atomic and retryable CSV rows
+
+- Scope: Phase 2 only; Phase 3 and later remain unimplemented.
+- Added `ImportRow.processingStatus`, `attemptCount`, `lastErrorCode`, and
+  `lastErrorMessage` independently from the input `action`.
+- Processing is paged in bounded 200-row batches and checks cancellation before every batch and row.
+- Duplicate candidates are rechecked in the row transaction.
+- Company, phone, contact, successful ImportRow result, and row audit are committed atomically.
+- A row failure rolls back its business writes, records a sanitized failure, and allows later rows
+  to continue.
+- `POST /api/v1/imports/companies/{id}/retry-failed` resets only failed rows and emits a fresh
+  transactional Outbox event. Successful rows remain terminal and are not recreated.
+- Existing CSV formula neutralization remains applied during upload and mapping.
+- External provider calls / real calls: 0.
+
+Focused tests:
+
+- `rolls back the company when a later row operation fails`
+- `retries only failed rows and never recreates successful rows`
+- `continues after one invalid row and distinguishes failed and successful results`
+
+Verification:
+
+- Prisma format / validate / generate: PASS
+- Empty database: all 13 migrations + seed: PASS
+- Prisma drift: none
+- lint / format / typecheck: PASS
+- Unit/API/Worker: 25 files, 104 tests: PASS
+- Existing E2E: 8 tests: PASS
+- Web/API/Worker production build: PASS
+- GitHub Actions: pending until the Phase 2 commit is pushed
+
+Open Phase 2 performance acceptance:
+
+- Mapping/duplicate preview preparation still runs in the API process.
+- A 10,000-row non-blocking and bounded-memory verification has not yet been added.
+- Phase 2 must not be marked complete, and Phase 3 must not start, until these are addressed.

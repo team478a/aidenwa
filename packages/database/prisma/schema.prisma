@@ -265,6 +265,14 @@ enum ImportRowAction {
   error
 }
 
+enum ImportRowProcessingStatus {
+  pending
+  processing
+  success
+  skipped
+  failed
+}
+
 model Company {
   id               String             @id @default(uuid()) @db.Uuid
   organizationId   String             @map("organization_id") @db.Uuid
@@ -503,20 +511,25 @@ model ImportJob {
 }
 
 model ImportRow {
-  id                  String          @id @default(uuid()) @db.Uuid
-  importJobId         String          @map("import_job_id") @db.Uuid
-  rowNumber           Int             @map("row_number")
-  rawData             Json            @map("raw_data")
-  normalizedData      Json            @map("normalized_data")
-  validationErrors    Json            @default("[]") @map("validation_errors")
-  duplicateCandidates Json            @default("[]") @map("duplicate_candidates")
-  action              ImportRowAction @default(review)
-  resultCompanyId     String?         @map("result_company_id") @db.Uuid
-  processedAt         DateTime?       @map("processed_at")
-  importJob           ImportJob       @relation(fields: [importJobId], references: [id], onDelete: Cascade)
-  resultCompany       Company?        @relation(fields: [resultCompanyId], references: [id], onDelete: SetNull)
+  id                  String                    @id @default(uuid()) @db.Uuid
+  importJobId         String                    @map("import_job_id") @db.Uuid
+  rowNumber           Int                       @map("row_number")
+  rawData             Json                      @map("raw_data")
+  normalizedData      Json                      @map("normalized_data")
+  validationErrors    Json                      @default("[]") @map("validation_errors")
+  duplicateCandidates Json                      @default("[]") @map("duplicate_candidates")
+  action              ImportRowAction           @default(review)
+  processingStatus    ImportRowProcessingStatus @default(pending) @map("processing_status")
+  attemptCount        Int                       @default(0) @map("attempt_count")
+  lastErrorCode       String?                   @map("last_error_code")
+  lastErrorMessage    String?                   @map("last_error_message")
+  resultCompanyId     String?                   @map("result_company_id") @db.Uuid
+  processedAt         DateTime?                 @map("processed_at")
+  importJob           ImportJob                 @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+  resultCompany       Company?                  @relation(fields: [resultCompanyId], references: [id], onDelete: SetNull)
 
   @@unique([importJobId, rowNumber])
+  @@index([importJobId, processingStatus, rowNumber])
   @@map("import_rows")
 }
 
