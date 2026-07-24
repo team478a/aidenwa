@@ -1,18 +1,26 @@
 import { truncateUtc, type Prisma, type PrismaClient } from '@sales-ai/database';
 import { MockVoiceProvider, maskPhone, type MockFixture } from '@sales-ai/voice-provider';
+import { mockCallStopTransition, type MockCallStopReason } from './mock-call-state.js';
 
-const provider = new MockVoiceProvider();
+const defaultProvider = new MockVoiceProvider();
+type MockProvider = Pick<MockVoiceProvider, 'createCall'>;
 
 export async function processMockCall(
   prisma: PrismaClient,
   callJobId: string,
   organizationId: string,
+  dependencies: { provider?: MockProvider } = {},
 ) {
   const job = await prisma.callJob.findFirst({
     where: { id: callJobId, organizationId },
     include: { campaign: true, target: true, attempts: true },
   });
-  if (!job || ['completed', 'cancelled', 'skipped'].includes(job.status)) return;
+  if (!job) return;
+  if (job.status === 'completed') {
+    await rebuildUsageCounters(prisma, organizationId);
+    return;
+  }
+  if (['cancelled', 'skipped'].includes(job.status)) return;
   const product = await prisma.productVersion.findFirst({
     where: { id: job.campaign.productVersionId, organizationId },
     select: { productId: true },
@@ -32,33 +40,16 @@ export async function processMockCall(
     },
   });
   if (emergencyStop) {
-    await prisma.callJob.update({
-      where: { id: job.id },
-      data: {
-        status: 'skipped',
-        errorCode: 'emergency_stop_active',
-        errorMessage: 'Worker safety recheck blocked dispatch',
-      },
-    });
+    await applyStop(prisma, job.id, job.target.id, 'emergency_stop_active');
     return;
   }
   if (job.campaign.status !== 'running') {
-    await prisma.callJob.update({
-      where: { id: job.id },
-      data: { status: 'skipped', errorCode: 'campaign_not_running' },
-    });
+    await applyStop(prisma, job.id, job.target.id, 'campaign_not_running');
     return;
   }
   const scheduleReason = await executionLimitReason(prisma, job);
   if (scheduleReason) {
-    await prisma.callJob.update({
-      where: { id: job.id },
-      data: { status: 'skipped', errorCode: scheduleReason },
-    });
-    await prisma.campaignTarget.update({
-      where: { id: job.target.id },
-      data: { status: scheduleReason === 'retry_not_due' ? 'retry_wait' : 'pending' },
-    });
+    await applyStop(prisma, job.id, job.target.id, scheduleReason);
     return;
   }
   const phone = job.target.phoneNumberId
@@ -92,23 +83,20 @@ export async function processMockCall(
         : phone.type === 'fax'
           ? 'fax'
           : 'not_callable';
-    await prisma.$transaction([
-      prisma.callJob.update({
-        where: { id: job.id },
-        data: { status: 'skipped', errorCode: reason },
-      }),
-      prisma.campaignTarget.update({
-        where: { id: job.target.id },
-        data: { status: 'excluded', eligibilityStatus: 'excluded', exclusionReason: reason },
-      }),
-    ]);
+    await applyStop(prisma, job.id, job.target.id, reason);
     return;
   }
-  const call = await provider.createCall({
-    idempotencyKey: job.idempotencyKey,
-    maskedDestination: maskPhone(phone.normalizedNumber),
-    fixture: job.fixture as MockFixture,
-  });
+  let call: Awaited<ReturnType<MockProvider['createCall']>>;
+  try {
+    call = await (dependencies.provider ?? defaultProvider).createCall({
+      idempotencyKey: job.idempotencyKey,
+      maskedDestination: maskPhone(phone.normalizedNumber),
+      fixture: job.fixture as MockFixture,
+    });
+  } catch {
+    await applyStop(prisma, job.id, job.target.id, 'provider_temporary_failure');
+    return;
+  }
   const attemptNumber = job.attempts.length + 1;
   const attempt = await prisma.callAttempt.upsert({
     where: { callJobId_attemptNumber: { callJobId: job.id, attemptNumber } },
@@ -126,6 +114,7 @@ export async function processMockCall(
   });
   const result = fixtureResult(job.fixture as MockFixture);
   const now = new Date();
+  const policy = await prisma.productionCallPolicy.findUnique({ where: { organizationId } });
   await prisma.$transaction(async (tx) => {
     await tx.callJob.update({
       where: { id: job.id },
@@ -225,49 +214,110 @@ export async function processMockCall(
         },
       },
     });
+    await tx.usageLedger.upsert({
+      where: {
+        executionType_executionId: { executionType: 'mock_call', executionId: job.id },
+      },
+      update: {},
+      create: {
+        organizationId,
+        executionType: 'mock_call',
+        executionId: job.id,
+        occurredAt: now,
+        callCount: 1,
+        amountMinor: policy?.mockCostPerCallMinor ?? 0,
+        currency: policy?.currency ?? 'JPY',
+        metadata: { provider: 'mock' },
+      },
+    });
   });
-  await recordMockUsage(prisma, organizationId, now);
+  await rebuildUsageCounters(prisma, organizationId);
 }
 
-async function recordMockUsage(prisma: PrismaClient, organizationId: string, now: Date) {
-  const policy = await prisma.productionCallPolicy.findUnique({ where: { organizationId } });
+export async function rebuildUsageCounters(prisma: PrismaClient, organizationId: string) {
+  const [ledgers, previousCalls, previousBudgets, policy] = await Promise.all([
+    prisma.usageLedger.findMany({
+      where: { organizationId },
+      orderBy: { occurredAt: 'asc' },
+    }),
+    prisma.callUsageCounter.findMany({ where: { organizationId } }),
+    prisma.callBudgetCounter.findMany({ where: { organizationId } }),
+    prisma.productionCallPolicy.findUnique({ where: { organizationId } }),
+  ]);
+  const calls = new Map<string, { periodType: string; periodStart: Date; callCount: number }>();
+  const budgets = new Map<
+    string,
+    { periodType: string; periodStart: Date; amountMinor: number; currency: string }
+  >();
+  for (const ledger of ledgers) {
+    for (const periodType of ['hour', 'day'] as const) {
+      const periodStart = truncateUtc(ledger.occurredAt, periodType);
+      const key = `${periodType}:${periodStart.toISOString()}`;
+      const current = calls.get(key);
+      calls.set(key, {
+        periodType,
+        periodStart,
+        callCount: (current?.callCount ?? 0) + ledger.callCount,
+      });
+    }
+    for (const periodType of ['day', 'month'] as const) {
+      const periodStart = truncateUtc(ledger.occurredAt, periodType);
+      const key = `${periodType}:${periodStart.toISOString()}`;
+      const current = budgets.get(key);
+      if (current && current.currency !== ledger.currency)
+        throw new Error('usage_ledger_currency_mismatch');
+      budgets.set(key, {
+        periodType,
+        periodStart,
+        amountMinor: (current?.amountMinor ?? 0) + ledger.amountMinor,
+        currency: ledger.currency,
+      });
+    }
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.callUsageCounter.deleteMany({ where: { organizationId } });
+    await tx.callBudgetCounter.deleteMany({ where: { organizationId } });
+    if (calls.size)
+      await tx.callUsageCounter.createMany({
+        data: [...calls.values()].map((item) => ({ organizationId, ...item })),
+      });
+    if (budgets.size)
+      await tx.callBudgetCounter.createMany({
+        data: [...budgets.values()].map((item) => ({ organizationId, ...item })),
+      });
+  });
   if (!policy) return;
-  for (const periodType of ['hour', 'day'] as const) {
-    const periodStart = truncateUtc(now, periodType);
-    const counter = await prisma.callUsageCounter.upsert({
-      where: { organizationId_periodType_periodStart: { organizationId, periodType, periodStart } },
-      update: { callCount: { increment: 1 } },
-      create: { organizationId, periodType, periodStart, callCount: 1 },
-    });
-    const limit = periodType === 'hour' ? policy.hourlyCallLimit : policy.dailyCallLimit;
+  for (const counter of calls.values()) {
+    const before =
+      previousCalls.find(
+        (item) =>
+          item.periodType === counter.periodType &&
+          item.periodStart.getTime() === counter.periodStart.getTime(),
+      )?.callCount ?? 0;
+    const limit = counter.periodType === 'hour' ? policy.hourlyCallLimit : policy.dailyCallLimit;
     await recordThreshold(
       prisma,
       organizationId,
-      `${periodType}_call`,
-      counter.callCount - 1,
+      `${counter.periodType}_call`,
+      before,
       counter.callCount,
       limit,
     );
   }
-  for (const periodType of ['day', 'month'] as const) {
-    const periodStart = truncateUtc(now, periodType);
-    const counter = await prisma.callBudgetCounter.upsert({
-      where: { organizationId_periodType_periodStart: { organizationId, periodType, periodStart } },
-      update: { amountMinor: { increment: policy.mockCostPerCallMinor } },
-      create: {
-        organizationId,
-        periodType,
-        periodStart,
-        amountMinor: policy.mockCostPerCallMinor,
-        currency: policy.currency,
-      },
-    });
-    const limit = periodType === 'day' ? policy.dailyBudgetMinor : policy.monthlyBudgetMinor;
+  for (const counter of budgets.values()) {
+    const before =
+      previousBudgets.find(
+        (item) =>
+          item.periodType === counter.periodType &&
+          item.periodStart.getTime() === counter.periodStart.getTime(),
+      )?.amountMinor ?? 0;
+    const limit =
+      counter.periodType === 'day' ? policy.dailyBudgetMinor : policy.monthlyBudgetMinor;
     await recordThreshold(
       prisma,
       organizationId,
-      `${periodType}_budget`,
-      counter.amountMinor - policy.mockCostPerCallMinor,
+      `${counter.periodType}_budget`,
+      before,
       counter.amountMinor,
       limit,
     );
@@ -301,13 +351,36 @@ async function recordThreshold(
       });
 }
 
+async function applyStop(
+  prisma: PrismaClient,
+  callJobId: string,
+  targetId: string,
+  reason: MockCallStopReason,
+) {
+  const transition = mockCallStopTransition(reason);
+  await prisma.$transaction([
+    prisma.callJob.update({
+      where: { id: callJobId },
+      data: { status: transition.callJobStatus, errorCode: reason },
+    }),
+    prisma.campaignTarget.update({
+      where: { id: targetId },
+      data: {
+        status: transition.targetStatus,
+        ...(transition.excluded
+          ? { eligibilityStatus: 'excluded', exclusionReason: reason }
+          : { reservedAt: null }),
+      },
+    }),
+  ]);
+}
+
 async function executionLimitReason(
   prisma: PrismaClient,
   job: Prisma.CallJobGetPayload<{
     include: { campaign: true; target: true; attempts: true };
   }>,
-) {
-  if (!job) return 'job_missing';
+): Promise<MockCallStopReason | null> {
   const now = new Date();
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {

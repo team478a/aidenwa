@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@sales-ai/database';
-import { processMockCall, recoverStuckReservations } from './mock-call';
+import { processMockCall, rebuildUsageCounters, recoverStuckReservations } from './mock-call';
 
 const url =
   process.env.DATABASE_URL ??
@@ -68,9 +68,16 @@ beforeAll(async () => {
       data: { organizationId: org, campaignId: campaign, companyId: company, phoneNumberId: phone },
     })
   ).id;
+  await prisma.productionCallPolicy.create({
+    data: { organizationId: org, updatedBy: user, mockCostPerCallMinor: 25 },
+  });
 });
 afterAll(async () => {
   await prisma.emergencyStop.deleteMany({ where: { organizationId: org } });
+  await prisma.callUsageCounter.deleteMany({ where: { organizationId: org } });
+  await prisma.callBudgetCounter.deleteMany({ where: { organizationId: org } });
+  await prisma.usageLedger.deleteMany({ where: { organizationId: org } });
+  await prisma.productionCallPolicy.deleteMany({ where: { organizationId: org } });
   await prisma.callEvent.deleteMany({ where: { organizationId: org } });
   await prisma.callAttempt.deleteMany({ where: { organizationId: org } });
   await prisma.callJob.deleteMany({ where: { organizationId: org } });
@@ -87,6 +94,7 @@ afterAll(async () => {
 
 describe('Stage 3 mock worker', () => {
   it('rechecks an emergency stop immediately before provider dispatch', async () => {
+    await prisma.campaignTarget.update({ where: { id: target }, data: { status: 'queued' } });
     const stop = await prisma.emergencyStop.create({
       data: {
         organizationId: org,
@@ -111,6 +119,9 @@ describe('Stage 3 mock worker', () => {
       providerJobId: null,
     });
     expect(await prisma.callAttempt.count({ where: { callJobId: job.id } })).toBe(0);
+    expect((await prisma.campaignTarget.findUniqueOrThrow({ where: { id: target } })).status).toBe(
+      'pending',
+    );
     await prisma.emergencyStop.update({
       where: { id: stop.id },
       data: {
@@ -119,6 +130,51 @@ describe('Stage 3 mock worker', () => {
         releasedAt: new Date(),
         releaseReason: 'test complete',
       },
+    });
+  });
+  it('returns a queued target to pending when the campaign is paused', async () => {
+    await prisma.campaign.update({ where: { id: campaign }, data: { status: 'paused' } });
+    await prisma.campaignTarget.update({ where: { id: target }, data: { status: 'queued' } });
+    const job = await prisma.callJob.create({
+      data: {
+        organizationId: org,
+        campaignId: campaign,
+        campaignTargetId: target,
+        idempotencyKey: `${suffix}:paused`,
+      },
+    });
+    await processMockCall(prisma, job.id, org);
+    expect(await prisma.callJob.findUniqueOrThrow({ where: { id: job.id } })).toMatchObject({
+      status: 'skipped',
+      errorCode: 'campaign_not_running',
+    });
+    expect((await prisma.campaignTarget.findUniqueOrThrow({ where: { id: target } })).status).toBe(
+      'pending',
+    );
+    await prisma.campaign.update({ where: { id: campaign }, data: { status: 'running' } });
+  });
+  it('moves both records to retry state after a temporary provider failure', async () => {
+    await prisma.campaignTarget.update({ where: { id: target }, data: { status: 'queued' } });
+    const job = await prisma.callJob.create({
+      data: {
+        organizationId: org,
+        campaignId: campaign,
+        campaignTargetId: target,
+        idempotencyKey: `${suffix}:provider-failure`,
+      },
+    });
+    await processMockCall(prisma, job.id, org, {
+      provider: {
+        createCall: () => Promise.reject(new Error('temporary provider failure')),
+      },
+    });
+    expect(await prisma.callJob.findUniqueOrThrow({ where: { id: job.id } })).toMatchObject({
+      status: 'failed',
+      errorCode: 'provider_temporary_failure',
+    });
+    expect(await prisma.campaignTarget.findUniqueOrThrow({ where: { id: target } })).toMatchObject({
+      status: 'retry_wait',
+      eligibilityStatus: 'eligible',
     });
   });
   it('applies qualified once when the queue redelivers', async () => {
@@ -137,6 +193,24 @@ describe('Stage 3 mock worker', () => {
     expect((await prisma.company.findUniqueOrThrow({ where: { id: company } })).salesStatus).toBe(
       'qualified',
     );
+    expect(
+      await prisma.usageLedger.count({
+        where: { executionType: 'mock_call', executionId: job.id },
+      }),
+    ).toBe(1);
+    const hour = await prisma.callUsageCounter.findFirstOrThrow({
+      where: { organizationId: org, periodType: 'hour' },
+    });
+    expect(hour.callCount).toBe(1);
+    await prisma.callUsageCounter.update({ where: { id: hour.id }, data: { callCount: 999 } });
+    await rebuildUsageCounters(prisma, org);
+    expect(
+      (
+        await prisma.callUsageCounter.findFirstOrThrow({
+          where: { organizationId: org, periodType: 'hour' },
+        })
+      ).callCount,
+    ).toBe(1);
   });
   it('registers opt-out and blocks a later job before provider dispatch', async () => {
     await prisma.campaignTarget.update({

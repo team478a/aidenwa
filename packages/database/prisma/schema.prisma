@@ -1160,6 +1160,23 @@ model CallBudgetCounter {
   @@map("call_budget_counters")
 }
 
+model UsageLedger {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  executionType  String   @map("execution_type")
+  executionId    String   @map("execution_id")
+  occurredAt     DateTime @map("occurred_at")
+  callCount      Int      @default(1) @map("call_count")
+  amountMinor    Int      @default(0) @map("amount_minor")
+  currency       String   @default("JPY")
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([executionType, executionId])
+  @@index([organizationId, occurredAt])
+  @@map("usage_ledger")
+}
+
 model ProductionGateDecision {
   id             String    @id @default(uuid()) @db.Uuid
   organizationId String    @map("organization_id") @db.Uuid
