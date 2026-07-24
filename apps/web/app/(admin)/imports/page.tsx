@@ -63,15 +63,31 @@ export default function Imports() {
       const found = headers.find((h) => h === field || h.includes(field));
       if (found) common[field] = found;
     }
-    await api(`/imports/companies/${job.id}/mapping`, {
+    const queued = await api<{ importJob: Job }>(`/imports/companies/${job.id}/mapping`, {
       method: 'POST',
       body: JSON.stringify({ mapping: common, duplicatePolicy: 'create' }),
     });
-    const p = await api<{ importJob: Job; rows: typeof rows }>(
-      `/imports/companies/${job.id}/preview`,
+    setJob(queued.importJob);
+    setMsg('プレビューをWorkerで準備しています');
+    const timer = setInterval(
+      () =>
+        void api<{ importJob: Job }>(`/imports/companies/${job.id}/status`).then(async (result) => {
+          setJob(result.importJob);
+          if (result.importJob.status === 'preview_ready') {
+            clearInterval(timer);
+            const preview = await api<{ importJob: Job; rows: typeof rows }>(
+              `/imports/companies/${job.id}/preview`,
+            );
+            setJob(preview.importJob);
+            setRows(preview.rows);
+            setMsg('');
+          } else if (['failed', 'cancelled'].includes(result.importJob.status)) {
+            clearInterval(timer);
+            setMsg('プレビュー準備に失敗または中止しました');
+          }
+        }),
+      500,
     );
-    setJob(p.importJob);
-    setRows(p.rows);
   }
   async function execute() {
     if (!job) return;

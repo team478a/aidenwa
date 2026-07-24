@@ -237,7 +237,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 
 ## Maintainability remediation Phase 2
 
-- Status: atomicity/retry subset locally verified; Phase 2 performance acceptance remains open.
+- Status: complete locally; GitHub Actions pending for the final Phase 2 commit.
 - ImportRow now separates requested `action` from `pending/processing/success/skipped/failed`
   processing results.
 - Each row rechecks duplicates and atomically commits company, phone, contact, result and audit.
@@ -249,13 +249,14 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Prisma format/validate/generate, all 13 migrations on an empty DB, seed and zero schema drift:
   PASS.
 - lint/format/typecheck: PASS.
-- Unit/API/Worker: 25 files, 104 tests PASS.
+- Unit/API/Worker: 25 files, 106 tests PASS.
 - Existing E2E: 8/8 PASS.
 - Web/API/Worker production build: PASS.
-- GitHub Actions: run `30034990609` PASS for commit `69796b4`.
-- Remaining before Phase 2 completion: move post-mapping row normalization/duplicate preparation out
-  of the API request, add a 10,000-row non-blocking performance test, and verify bounded-memory CSV
-  parsing.
+- Mapping/duplicate preview preparation is delivered through Outbox and processed by the Worker in
+  200-row pages with one batched duplicate lookup per page.
+- The 10,000-row API test returns `202`, leaves all rows untouched and creates one pending mapping
+  event.
+- GitHub Actions: run `30034990609` PASS for the atomicity commit; final Phase 2 CI pending.
 - Phase 3 and later: not started by this change.
 - External Provider/API/real telephone calls: 0.
 

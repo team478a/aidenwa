@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@sales-ai/database';
-import { processCompanyImport, processImportRow } from './company-import.js';
+import { normalizeCompanyName } from '@sales-ai/shared/stage2';
+import { mapCompanyImport, processCompanyImport, processImportRow } from './company-import.js';
 
 const prisma = new PrismaClient({
   datasources: {
@@ -68,6 +69,62 @@ async function createImport(name: string, rows: Array<Record<string, string>>) {
 }
 
 describe('atomic company import rows', () => {
+  it('maps rows in Worker batches, neutralizes formulas and finds duplicate reasons', async () => {
+    const existing = await prisma.company.create({
+      data: {
+        organizationId,
+        name: `${suffix}-duplicate`,
+        normalizedName: normalizeCompanyName(`${suffix}-duplicate`),
+      },
+    });
+    const job = await prisma.importJob.create({
+      data: {
+        organizationId,
+        originalFileName: 'mapping.csv',
+        storageKey: 'db://mapping',
+        encoding: 'utf8',
+        mapping: { name: 'company_name', address: 'address' },
+        duplicatePolicy: 'create',
+        status: 'mapping_required',
+        totalRows: 2,
+        createdBy: userId,
+        expiresAt: new Date(Date.now() + 60_000),
+        rows: {
+          create: [
+            {
+              rowNumber: 2,
+              rawData: { company_name: `${suffix}-duplicate`, address: 'Tokyo' },
+              normalizedData: {},
+            },
+            {
+              rowNumber: 3,
+              rawData: { company_name: '=DANGEROUS()', address: 'Osaka' },
+              normalizedData: {},
+            },
+          ],
+        },
+      },
+    });
+    await mapCompanyImport(prisma, { importJobId: job.id, organizationId });
+    const rows = await prisma.importRow.findMany({
+      where: { importJobId: job.id },
+      orderBy: { rowNumber: 'asc' },
+    });
+    const candidates = rows[0]?.duplicateCandidates as Array<{
+      companyId: string;
+      reasons: string[];
+    }>;
+    expect(candidates[0]?.companyId).toBe(existing.id);
+    expect(candidates[0]?.reasons).toContain('normalized_name');
+    expect(rows[0]?.action).toBe('review');
+    expect(rows[1]?.normalizedData).toMatchObject({ name: "'=DANGEROUS()" });
+    expect(await prisma.importJob.findUniqueOrThrow({ where: { id: job.id } })).toMatchObject({
+      status: 'preview_ready',
+      validRows: 2,
+      errorRows: 0,
+    });
+  });
+
   it('rolls back the company when a later row operation fails', async () => {
     const job = await createImport('rollback', [
       { name: `${suffix}-rollback`, phone: '0312345678' },

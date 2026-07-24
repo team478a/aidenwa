@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const outboxEventTypes = [
+  'company-import-mapping',
   'company-import',
   'mock-call',
   'twilio-call',
@@ -42,6 +43,7 @@ export type OutboxPayload =
 
 export function parseOutboxPayload(eventType: OutboxEventType, payload: unknown): OutboxPayload {
   switch (eventType) {
+    case 'company-import-mapping':
     case 'company-import':
       return companyImportPayloadSchema.parse(payload);
     case 'mock-call':

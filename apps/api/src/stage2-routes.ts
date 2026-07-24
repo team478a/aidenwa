@@ -664,63 +664,27 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
       where: { id, organizationId: auth.organizationId },
     });
     if (!job) return deps.error(reply, 404, 'NOT_FOUND', 'インポートが見つかりません');
-    const rows = await prisma.importRow.findMany({
-      where: { importJobId: id },
-      orderBy: { rowNumber: 'asc' },
-    });
-    let valid = 0;
-    let errors = 0;
-    for (const row of rows) {
-      const raw = row.rawData as Record<string, string>;
-      const normalized = Object.fromEntries(
-        Object.entries(input.mapping).map(([field, column]) => [
-          field,
-          neutralizeCsvFormula(raw[column] ?? ''),
-        ]),
-      );
-      const validationErrors = normalized.name?.trim() ? [] : ['name_required'];
-      if (!validationErrors.length) valid += 1;
-      else errors += 1;
-      const candidates = validationErrors.length
-        ? []
-        : await findDuplicateCandidates(prisma, auth.organizationId, {
-            name: normalized.name,
-            corporateNumber: normalized.corporateNumber,
-            phone: normalized.phone,
-            websiteUrl: normalized.websiteUrl,
-            address: normalized.address,
-          });
-      await prisma.importRow.update({
-        where: { id: row.id },
+    const updated = await prisma.$transaction(async (tx) => {
+      const importJob = await tx.importJob.update({
+        where: { id },
         data: {
-          normalizedData: normalized,
-          validationErrors,
-          duplicateCandidates: candidates,
-          processingStatus: 'pending',
-          attemptCount: 0,
-          lastErrorCode: null,
-          lastErrorMessage: null,
-          processedAt: null,
-          resultCompanyId: null,
-          action: validationErrors.length
-            ? 'error'
-            : candidates.length
-              ? 'review'
-              : input.duplicatePolicy,
+          mapping: input.mapping,
+          duplicatePolicy: input.duplicatePolicy,
+          validRows: 0,
+          errorRows: 0,
+          status: 'mapping_required',
         },
       });
-    }
-    const updated = await prisma.importJob.update({
-      where: { id },
-      data: {
-        mapping: input.mapping,
-        duplicatePolicy: input.duplicatePolicy,
-        validRows: valid,
-        errorRows: errors,
-        status: 'preview_ready',
-      },
+      await enqueueOutbox(tx, {
+        organizationId: auth.organizationId,
+        eventType: 'company-import-mapping',
+        aggregateType: 'import_job',
+        aggregateId: id,
+        payload: { importJobId: id, organizationId: auth.organizationId },
+      });
+      return importJob;
     });
-    return { importJob: updated };
+    return reply.code(202).send({ importJob: updated });
   });
   app.get('/api/v1/imports/companies/:id/preview', async (request, reply) =>
     importRead(request, reply, 'preview'),

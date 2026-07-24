@@ -10,7 +10,7 @@ import { reopenSnoozedFollowups } from './followup.js';
 import { cleanupExpiredHandoffs } from './handoff-cleanup.js';
 import { maintainAppointments } from './appointment.js';
 import { publishOutboxBatch, repairOutboxGaps } from './outbox.js';
-import { processCompanyImport } from './company-import.js';
+import { mapCompanyImport, processCompanyImport } from './company-import.js';
 import {
   expireTwilioAuthorizations,
   processTwilioCall,
@@ -55,6 +55,11 @@ async function processor(job: Job) {
   if (job.name === 'mock-call') {
     const data = job.data as { callJobId: string; organizationId: string };
     await processMockCall(prisma, data.callJobId, data.organizationId);
+    return;
+  }
+  if (job.name === 'company-import-mapping') {
+    const data = job.data as { importJobId: string; organizationId: string };
+    await mapCompanyImport(prisma, data);
     return;
   }
   if (job.name !== 'company-import') return;

@@ -98,6 +98,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   const orgs = [orgId, otherOrgId];
+  await prisma.outboxEvent.deleteMany({ where: { organizationId: { in: orgs } } });
   await prisma.importRow.deleteMany({ where: { importJob: { organizationId: { in: orgs } } } });
   await prisma.importJob.deleteMany({ where: { organizationId: { in: orgs } } });
   await prisma.optOut.deleteMany({ where: { organizationId: { in: orgs } } });
@@ -119,6 +120,53 @@ afterAll(async () => {
 });
 
 describe('Stage 2 sales data', () => {
+  it('queues mapping for 10,000 rows without processing them in the API request', async () => {
+    const admin = await login(`admin@${suffix}.test`);
+    const adminUser = await prisma.user.findFirstOrThrow({
+      where: { organizationId: orgId, role: 'admin' },
+    });
+    const job = await prisma.importJob.create({
+      data: {
+        organizationId: orgId,
+        originalFileName: 'large.csv',
+        storageKey: 'db://large',
+        encoding: 'utf8',
+        status: 'mapping_required',
+        totalRows: 10_000,
+        createdBy: adminUser.id,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    await prisma.importRow.createMany({
+      data: Array.from({ length: 10_000 }, (_, index) => ({
+        importJobId: job.id,
+        rowNumber: index + 2,
+        rawData: { company_name: `Company ${index}` },
+        normalizedData: {},
+      })),
+    });
+
+    const startedAt = performance.now();
+    const response = await req(admin, 'POST', `/api/v1/imports/companies/${job.id}/mapping`, {
+      mapping: { name: 'company_name' },
+      duplicatePolicy: 'create',
+    });
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(response.statusCode).toBe(202);
+    expect(elapsedMs).toBeLessThan(3_000);
+    expect(
+      await prisma.importRow.count({
+        where: { importJobId: job.id, normalizedData: { equals: {} } },
+      }),
+    ).toBe(10_000);
+    expect(
+      await prisma.outboxEvent.count({
+        where: { eventType: 'company-import-mapping', aggregateId: job.id, status: 'pending' },
+      }),
+    ).toBe(1);
+  }, 30_000);
+
   it('creates companies, contacts and phones while forcing FAX non-callable', async () => {
     const admin = await login(`admin@${suffix}.test`);
     const c = await req(admin, 'POST', '/api/v1/companies', {

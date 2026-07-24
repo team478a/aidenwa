@@ -1,7 +1,11 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 export type OutboxEventType =
-  'company-import' | 'mock-call' | 'twilio-call' | 'twilio-emergency-stop';
+  | 'company-import-mapping'
+  | 'company-import'
+  | 'mock-call'
+  | 'twilio-call'
+  | 'twilio-emergency-stop';
 
 type OutboxClient = Prisma.TransactionClient | PrismaClient;
 

@@ -14,6 +14,12 @@ This runbook covers Phase 2 row-level recovery. It does not enable any external 
 
 `action` remains the requested duplicate policy. It is not overwritten when processing fails.
 
+## Asynchronous preview preparation
+
+The mapping endpoint stores the mapping and creates a `company-import-mapping` Outbox event in one
+transaction. The API returns `202`; the Worker prepares rows in bounded 200-row batches and performs
+one batched duplicate query per page. Poll the status endpoint until `preview_ready`.
+
 ## Retry
 
 An administrator or manager can call:

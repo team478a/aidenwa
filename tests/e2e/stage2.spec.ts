@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 test('Stage 2 admin workflow preserves duplicate, opt-out, and audit controls', async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   const suffix = Date.now().toString();
   const companyName = `Stage2 E2E ${suffix}`;
   const tagName = `E2Eタグ ${suffix}`;

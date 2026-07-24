@@ -16,6 +16,8 @@ const LOCK_TIMEOUT_MS = 5 * 60_000;
 function queueOptions(eventType: OutboxEventType, aggregateId: string): JobsOptions {
   const common = { removeOnComplete: 100, removeOnFail: 100 };
   switch (eventType) {
+    case 'company-import-mapping':
+      return { ...common, jobId: `company-import-mapping-${aggregateId}`, attempts: 3 };
     case 'company-import':
       return { ...common, jobId: `company-import-${aggregateId}`, attempts: 3 };
     case 'mock-call':

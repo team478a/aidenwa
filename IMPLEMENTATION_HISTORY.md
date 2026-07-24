@@ -204,3 +204,11 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Added the import recovery runbook. Phase 3 and later were not changed.
 - GitHub Actions run `30034990609` passed all required checks for commit `69796b4`.
 - Kept all external integration flags false and made zero real telephone or external Provider calls.
+- Moved mapping, formula neutralization and duplicate preview preparation from the API request to a
+  `company-import-mapping` Outbox/Worker job.
+- Added bounded 200-row mapping pages and one bulk duplicate lookup per page.
+- Updated the import UI to poll for `preview_ready` before exposing execution.
+- Added a 10,000-row API test proving immediate queueing without row mutation, plus Worker coverage
+  for formula injection and reason-bearing duplicate candidates.
+- Increased only the Stage 2 end-to-end scenario timeout to cover the added asynchronous boundary;
+  all eight E2E scenarios pass.

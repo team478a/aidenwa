@@ -4,11 +4,89 @@ import {
   normalizeDomain,
   normalizeEmail,
   normalizePhoneNumber,
+  neutralizeCsvFormula,
 } from '@sales-ai/shared/stage2';
 
 const BATCH_SIZE = 200;
 
 type NormalizedRow = Record<string, string>;
+
+export async function mapCompanyImport(
+  prisma: PrismaClient,
+  data: { importJobId: string; organizationId: string },
+) {
+  const job = await prisma.importJob.findFirst({
+    where: { id: data.importJobId, organizationId: data.organizationId },
+  });
+  if (!job || job.status !== 'mapping_required') return;
+  const mapping = job.mapping as Record<string, string>;
+  let cursor: string | undefined;
+  let valid = 0;
+  let errors = 0;
+
+  for (;;) {
+    const current = await prisma.importJob.findUnique({
+      where: { id: job.id },
+      select: { status: true },
+    });
+    if (!current || current.status === 'cancelled') return;
+    const rows = await prisma.importRow.findMany({
+      where: { importJobId: job.id },
+      orderBy: [{ rowNumber: 'asc' }, { id: 'asc' }],
+      take: BATCH_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    if (!rows.length) break;
+
+    const prepared = rows.map((row) => {
+      const raw = row.rawData as Record<string, string>;
+      const normalized = Object.fromEntries(
+        Object.entries(mapping).map(([field, column]) => [
+          field,
+          neutralizeCsvFormula(raw[column] ?? ''),
+        ]),
+      );
+      return { row, normalized };
+    });
+    const candidateMap = await findCandidatesForBatch(
+      prisma,
+      job.organizationId,
+      prepared.map((item) => item.normalized),
+    );
+    await prisma.$transaction(
+      prepared.map(({ row, normalized }, index) => {
+        const validationErrors = normalized.name?.trim() ? [] : ['name_required'];
+        const candidates = validationErrors.length ? [] : (candidateMap.get(index) ?? []);
+        if (validationErrors.length) errors += 1;
+        else valid += 1;
+        return prisma.importRow.update({
+          where: { id: row.id },
+          data: {
+            normalizedData: normalized,
+            validationErrors,
+            duplicateCandidates: candidates,
+            processingStatus: 'pending',
+            attemptCount: 0,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            processedAt: null,
+            resultCompanyId: null,
+            action: validationErrors.length
+              ? 'error'
+              : candidates.length
+                ? 'review'
+                : job.duplicatePolicy,
+          },
+        });
+      }),
+    );
+    cursor = rows.at(-1)?.id;
+  }
+  await prisma.importJob.updateMany({
+    where: { id: job.id, organizationId: job.organizationId, status: 'mapping_required' },
+    data: { validRows: valid, errorRows: errors, status: 'preview_ready' },
+  });
+}
 
 export async function processCompanyImport(
   prisma: PrismaClient,
@@ -320,6 +398,73 @@ async function findCandidates(
       return { ...company, reasons };
     })
     .filter((company) => company.reasons.length);
+}
+
+async function findCandidatesForBatch(
+  prisma: PrismaClient,
+  organizationId: string,
+  inputs: NormalizedRow[],
+) {
+  const normalized = inputs.map((input) => ({
+    corporateNumber: input.corporateNumber || null,
+    phone: input.phone ? normalizePhoneNumber(input.phone).normalizedNumber : null,
+    domain: normalizeDomain(input.websiteUrl),
+    normalizedName: input.name ? normalizeCompanyName(input.name) : null,
+    address: input.address || null,
+  }));
+  const corporateNumbers = [...new Set(normalized.flatMap((item) => item.corporateNumber ?? []))];
+  const phones = [...new Set(normalized.flatMap((item) => item.phone ?? []))];
+  const names = [...new Set(normalized.flatMap((item) => item.normalizedName ?? []))];
+  const domains = [...new Set(normalized.flatMap((item) => item.domain ?? []))];
+  const companies = await prisma.company.findMany({
+    where: {
+      organizationId,
+      isDeleted: false,
+      OR: [
+        ...(corporateNumbers.length ? [{ corporateNumber: { in: corporateNumbers } }] : []),
+        ...(phones.length
+          ? [{ phoneNumbers: { some: { normalizedNumber: { in: phones }, isDeleted: false } } }]
+          : []),
+        ...(names.length ? [{ normalizedName: { in: names } }] : []),
+        ...domains.map((domain) => ({
+          websiteUrl: { contains: domain, mode: 'insensitive' as const },
+        })),
+      ],
+    },
+    include: { phoneNumbers: { where: { isDeleted: false }, select: { normalizedNumber: true } } },
+  });
+  const result = new Map<
+    number,
+    Array<{ companyId: string; companyName: string; reasons: string[] }>
+  >();
+  normalized.forEach((input, index) => {
+    const candidates = companies
+      .map((company) => {
+        const reasons: string[] = [];
+        if (input.corporateNumber && company.corporateNumber === input.corporateNumber)
+          reasons.push('corporate_number_exact');
+        if (
+          input.phone &&
+          company.phoneNumbers.some((phone) => phone.normalizedNumber === input.phone)
+        )
+          reasons.push('phone_exact');
+        if (input.domain && normalizeDomain(company.websiteUrl) === input.domain)
+          reasons.push('domain_exact');
+        if (
+          input.normalizedName &&
+          company.normalizedName === input.normalizedName &&
+          input.address &&
+          company.address === input.address
+        )
+          reasons.push('name_address_exact');
+        else if (input.normalizedName && company.normalizedName === input.normalizedName)
+          reasons.push('normalized_name');
+        return { companyId: company.id, companyName: company.name, reasons };
+      })
+      .filter((candidate) => candidate.reasons.length);
+    result.set(index, candidates);
+  });
+  return result;
 }
 
 function companyValues(input: NormalizedRow) {

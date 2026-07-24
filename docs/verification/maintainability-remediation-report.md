@@ -68,13 +68,24 @@ Verification:
 - Empty database: all 13 migrations + seed: PASS
 - Prisma drift: none
 - lint / format / typecheck: PASS
-- Unit/API/Worker: 25 files, 104 tests: PASS
+- Unit/API/Worker: 25 files, 106 tests: PASS
 - Existing E2E: 8 tests: PASS
 - Web/API/Worker production build: PASS
 - GitHub Actions: run `30034990609` PASS for commit `69796b4`
 
-Open Phase 2 performance acceptance:
+Phase 2 performance acceptance:
 
-- Mapping/duplicate preview preparation still runs in the API process.
-- A 10,000-row non-blocking and bounded-memory verification has not yet been added.
-- Phase 2 must not be marked complete, and Phase 3 must not start, until these are addressed.
+- Mapping/duplicate preview preparation runs in the Worker in bounded 200-row pages.
+- Duplicate lookup is batched once per page rather than queried once per row.
+- A 10,000-row API test verifies a `202` response without updating any ImportRow and exactly one
+  pending Outbox event.
+- Upload size and row count remain bounded by `CSV_MAX_BYTES` and `CSV_MAX_ROWS`; persisted row
+  processing does not retain the complete import in Worker memory.
+
+Final Phase 2 verification:
+
+- lint / format / typecheck: PASS
+- Unit/API/Worker: 25 files, 106 tests: PASS
+- E2E: 8 tests: PASS
+- Web/API/Worker production build: PASS
+- External provider calls / real calls: 0
