@@ -257,7 +257,23 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - The 10,000-row API test returns `202`, leaves all rows untouched and creates one pending mapping
   event.
 - GitHub Actions: run `30063711663` PASS for final Phase 2 commit `2080a39`.
-- Phase 3 and later: not started by this change.
+
+## Maintainability remediation Phase 3
+
+- Status: complete.
+- CallJob/CampaignTarget stop transitions use a pure state machine and atomic updates.
+- Emergency and campaign stops no longer leave CampaignTarget in `queued`.
+- FAX, missing/invalid phone and opt-out result in permanent target exclusion.
+- Temporary provider failure results in CallJob `failed` and target `retry_wait`.
+- Migration `20260724030000_phase3_usage_ledger` adds unique execution accounting.
+- Usage counters can be rebuilt from the ledger and completed-job redelivery performs recovery
+  without repeating a call outcome.
+- Focused state/accounting tests and all 115 Unit/API/Worker tests: PASS.
+- Prisma format/validate/generate, all 14 migrations on an empty DB, seed and zero schema drift:
+  PASS.
+- lint/format/typecheck, all 8 E2E and Web/API/Worker production build: PASS.
+- GitHub Actions: run `30068669227` PASS for Phase 3 commit `ac2398c`.
+- Phase 4 and later: not started.
 - External Provider/API/real telephone calls: 0.
 
 ## Temporary implementation / known issues

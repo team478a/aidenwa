@@ -214,3 +214,17 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   all eight E2E scenarios pass.
 - Removed a fixed-clock dependency from the Outbox redelivery test, verified it five consecutive
   times, and passed GitHub Actions run `30063711663` on commit `2080a39`.
+
+## 2026-07-24 — Maintainability remediation Phase 3
+
+- Added a pure Mock call stop-state mapping and atomic CallJob/CampaignTarget updates.
+- Fixed emergency-stop and campaign-stop paths that previously left queued targets unchanged.
+- Added explicit permanent exclusion and temporary provider retry transitions.
+- Added migration `20260724030000_phase3_usage_ledger` with unique execution accounting.
+- Moved Mock usage recording into the call outcome transaction and made counters rebuildable from
+  the ledger.
+- Added state-machine, stop consistency, provider failure, duplicate-accounting and counter-rebuild
+  tests.
+- Added Mock state architecture and usage recovery documentation.
+- Kept the Mock provider active and made zero real telephone or external Provider calls.
+- Committed the Phase 3 implementation as `ac2398c`; GitHub Actions run `30068669227` passed.

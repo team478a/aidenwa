@@ -90,3 +90,24 @@ Final Phase 2 verification:
 - Web/API/Worker production build: PASS
 - GitHub Actions: run `30063711663` PASS for final Phase 2 commit `2080a39`
 - External provider calls / real calls: 0
+
+## Phase 3 — Mock call state and usage consistency
+
+- Scope: Phase 3 only; Phase 4 and later remain unimplemented.
+- Added a pure state transition function for emergency stop, campaign stop, scheduling limits,
+  FAX/invalid/opt-out exclusion and temporary provider failure.
+- CallJob and CampaignTarget stop states now commit in one transaction.
+- Emergency/campaign stops return queued targets to `pending`; permanent exclusions move targets to
+  `excluded`; temporary failures move targets to `retry_wait`.
+- Added migration `20260724030000_phase3_usage_ledger`.
+- Mock call outcome and its unique Usage Ledger row commit in the same transaction.
+- Counter projections rebuild from the organization-scoped ledger. Completed-job redelivery retries
+  rebuilding without provider dispatch or outcome duplication.
+- Focused tests cover seven state mappings, emergency/campaign stop consistency, provider failure,
+  unique ledger accounting and counter reconstruction.
+- Unit/API/Worker: 26 files, 115 tests: PASS locally.
+- Prisma format/validate/generate: PASS.
+- Empty database: all 14 migrations + seed; Prisma drift: none.
+- lint/format/typecheck, 8 E2E tests and Web/API/Worker production build: PASS.
+- GitHub Actions: run `30068669227` PASS for Phase 3 commit `ac2398c`.
+- External provider calls / real calls: 0.
