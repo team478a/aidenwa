@@ -135,6 +135,7 @@ describe('transactional outbox', () => {
 
   it('retries after queue failure and publishes once with a stable BullMQ job id', async () => {
     const aggregateId = randomUUID();
+    const firstAttemptAt = new Date('2026-07-24T00:00:00Z');
     await enqueueOutbox(prisma, {
       organizationId,
       eventType: 'company-import',
@@ -142,9 +143,13 @@ describe('transactional outbox', () => {
       aggregateId,
       payload: { importJobId: aggregateId, organizationId },
     });
+    await prisma.outboxEvent.update({
+      where: { eventType_aggregateId: { eventType: 'company-import', aggregateId } },
+      data: { availableAt: new Date(firstAttemptAt.getTime() - 1000) },
+    });
     const queue = new FakeQueue();
     queue.fail = true;
-    const first = await publishOutboxBatch(prisma, queue, new Date('2026-07-24T00:00:00Z'));
+    const first = await publishOutboxBatch(prisma, queue, firstAttemptAt);
     expect(first.published).toBe(0);
     expect(first.retried).toBeGreaterThanOrEqual(1);
     expect(
@@ -153,9 +158,13 @@ describe('transactional outbox', () => {
       }),
     ).toMatchObject({ status: 'pending', attemptCount: 1 });
     queue.fail = false;
-    const second = await publishOutboxBatch(prisma, queue, new Date('2026-07-24T00:00:02Z'));
+    const second = await publishOutboxBatch(
+      prisma,
+      queue,
+      new Date(firstAttemptAt.getTime() + 2000),
+    );
     expect(second.published).toBeGreaterThanOrEqual(1);
-    await publishOutboxBatch(prisma, queue, new Date('2026-07-24T00:00:03Z'));
+    await publishOutboxBatch(prisma, queue, new Date(firstAttemptAt.getTime() + 3000));
     expect(
       queue.calls.map((call) => call.options.jobId).filter((id) => id?.endsWith(aggregateId)),
     ).toEqual([`company-import-${aggregateId}`, `company-import-${aggregateId}`]);
