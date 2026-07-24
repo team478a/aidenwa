@@ -237,7 +237,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 
 ## Maintainability remediation Phase 2
 
-- Status: complete locally; GitHub Actions pending for the final Phase 2 commit.
+- Status: complete.
 - ImportRow now separates requested `action` from `pending/processing/success/skipped/failed`
   processing results.
 - Each row rechecks duplicates and atomically commits company, phone, contact, result and audit.
@@ -256,7 +256,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
   200-row pages with one batched duplicate lookup per page.
 - The 10,000-row API test returns `202`, leaves all rows untouched and creates one pending mapping
   event.
-- GitHub Actions: run `30034990609` PASS for the atomicity commit; final Phase 2 CI pending.
+- GitHub Actions: run `30063711663` PASS for final Phase 2 commit `2080a39`.
 - Phase 3 and later: not started by this change.
 - External Provider/API/real telephone calls: 0.
 

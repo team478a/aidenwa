@@ -212,3 +212,5 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   for formula injection and reason-bearing duplicate candidates.
 - Increased only the Stage 2 end-to-end scenario timeout to cover the added asynchronous boundary;
   all eight E2E scenarios pass.
+- Removed a fixed-clock dependency from the Outbox redelivery test, verified it five consecutive
+  times, and passed GitHub Actions run `30063711663` on commit `2080a39`.
