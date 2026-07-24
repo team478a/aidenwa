@@ -79,6 +79,8 @@ export function registerStage4ERoutes(app: FastifyInstance, deps: Deps) {
         createdBy: auth.userId,
         version: (last?.version ?? 0) + 1,
         ...input,
+        validFrom: input.validFrom ? new Date(input.validFrom) : null,
+        validUntil: input.validUntil ? new Date(input.validUntil) : null,
       },
     });
     await audit(request, auth, 'appointment_policy.created', 'appointment_policy', policy.id, {
@@ -135,7 +137,12 @@ export function registerStage4ERoutes(app: FastifyInstance, deps: Deps) {
     if (!user) return deps.error(reply, 404, 'NOT_FOUND', '担当者がありません');
     return reply.code(201).send({
       rule: await prisma.availabilityRule.create({
-        data: { organizationId: auth.organizationId, ...input },
+        data: {
+          organizationId: auth.organizationId,
+          ...input,
+          effectiveFrom: input.effectiveFrom ? new Date(input.effectiveFrom) : null,
+          effectiveUntil: input.effectiveUntil ? new Date(input.effectiveUntil) : null,
+        },
       }),
     });
   });
@@ -257,7 +264,7 @@ export function registerStage4ERoutes(app: FastifyInstance, deps: Deps) {
     }
   });
   const transition =
-    (action: 'confirm' | 'cancel' | 'complete' | 'no_show') =>
+    (action: 'confirm' | 'cancel' | 'complete' | 'no_show' | 'request_reschedule') =>
     async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = await mutate(request, reply);
       if (!auth) return;
@@ -302,6 +309,7 @@ export function registerStage4ERoutes(app: FastifyInstance, deps: Deps) {
   app.post('/api/v1/appointments/:id/cancel', transition('cancel'));
   app.post('/api/v1/appointments/:id/complete', transition('complete'));
   app.post('/api/v1/appointments/:id/no-show', transition('no_show'));
+  app.post('/api/v1/appointments/:id/request-reschedule', transition('request_reschedule'));
   app.post('/api/v1/appointments/:id/reschedule', async (request, reply) => {
     const auth = await mutate(request, reply);
     if (!auth) return;

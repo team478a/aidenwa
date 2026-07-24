@@ -240,3 +240,19 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Added 18 environment validation tests and the production environment operations guide.
 - Kept every external integration disabled and made zero real telephone or external Provider calls.
 - Committed the Phase 4 implementation as `f14d7fe`; GitHub Actions run `30084030037` passed.
+
+## 2026-07-24 — Maintainability remediation Phase 5
+
+- Added an explicit appointment state machine with start-time and cancellation-deadline guards.
+- Added the `reschedule_requested` intermediate state and a request-reschedule API route.
+- Moved appointment version/state updates into the same transaction as AppointmentEvent,
+  notification and applicable sales handoff/follow-up updates.
+- Strictly validated signed slot JSON with Zod and rechecked policy, availability, duration, notice
+  and advance constraints during hold/reschedule.
+- Added service-level organization checks for every appointment creation reference.
+- Added Appointment/AppointmentEvent Prisma relations, foreign keys, state/period checks and
+  reschedule overlap protection in two migrations.
+- Added state, rollback, concurrency, invalid token, effective period, deadline, cross-tenant and
+  HTTP 409 tests.
+- Added the appointment state-machine architecture document.
+- Kept the internal/Fake calendar path active and made zero external calendar or telephone calls.

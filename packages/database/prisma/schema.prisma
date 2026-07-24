@@ -40,25 +40,27 @@ enum UserStatus {
 }
 
 model Organization {
-  id           String             @id @default(uuid()) @db.Uuid
-  name         String
-  slug         String             @unique
-  timezone     String             @default("Asia/Tokyo")
-  status       OrganizationStatus @default(active)
-  settings     Json               @default("{}")
-  createdAt    DateTime           @default(now()) @map("created_at")
-  updatedAt    DateTime           @updatedAt @map("updated_at")
-  teams        Team[]
-  users        User[]
-  sessions     Session[]
-  auditLogs    AuditLog[]
-  companies    Company[]
-  contacts     CompanyContact[]
-  phoneNumbers PhoneNumber[]
-  tags         Tag[]
-  salesLists   SalesList[]
-  optOuts      OptOut[]
-  importJobs   ImportJob[]
+  id                String             @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String             @unique
+  timezone          String             @default("Asia/Tokyo")
+  status            OrganizationStatus @default(active)
+  settings          Json               @default("{}")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  teams             Team[]
+  users             User[]
+  sessions          Session[]
+  auditLogs         AuditLog[]
+  companies         Company[]
+  contacts          CompanyContact[]
+  phoneNumbers      PhoneNumber[]
+  tags              Tag[]
+  salesLists        SalesList[]
+  optOuts           OptOut[]
+  importJobs        ImportJob[]
+  appointments      Appointment[]
+  appointmentEvents AppointmentEvent[]
 
   @@map("organizations")
 }
@@ -81,29 +83,30 @@ model Team {
 }
 
 model User {
-  id                 String             @id @default(uuid()) @db.Uuid
-  organizationId     String             @map("organization_id") @db.Uuid
-  teamId             String?            @map("team_id") @db.Uuid
-  name               String
-  email              String
-  passwordHash       String             @map("password_hash")
-  role               UserRole
-  status             UserStatus         @default(invited)
-  lastLoginAt        DateTime?          @map("last_login_at")
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
-  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  team               Team?              @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
-  managedTeams       Team[]             @relation("TeamManager")
-  sessions           Session[]
-  auditLogs          AuditLog[]
-  ownedCompanies     Company[]          @relation("CompanyOwner")
-  assignedTags       CompanyTag[]       @relation("TagAssigner")
-  createdSalesLists  SalesList[]        @relation("SalesListCreator")
-  addedListCompanies SalesListCompany[] @relation("ListCompanyAdder")
-  registeredOptOuts  OptOut[]           @relation("OptOutRegistrar")
-  releasedOptOuts    OptOut[]           @relation("OptOutReleaser")
-  importJobs         ImportJob[]        @relation("ImportCreator")
+  id                   String             @id @default(uuid()) @db.Uuid
+  organizationId       String             @map("organization_id") @db.Uuid
+  teamId               String?            @map("team_id") @db.Uuid
+  name                 String
+  email                String
+  passwordHash         String             @map("password_hash")
+  role                 UserRole
+  status               UserStatus         @default(invited)
+  lastLoginAt          DateTime?          @map("last_login_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  team                 Team?              @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  managedTeams         Team[]             @relation("TeamManager")
+  sessions             Session[]
+  auditLogs            AuditLog[]
+  ownedCompanies       Company[]          @relation("CompanyOwner")
+  assignedTags         CompanyTag[]       @relation("TagAssigner")
+  createdSalesLists    SalesList[]        @relation("SalesListCreator")
+  addedListCompanies   SalesListCompany[] @relation("ListCompanyAdder")
+  registeredOptOuts    OptOut[]           @relation("OptOutRegistrar")
+  releasedOptOuts      OptOut[]           @relation("OptOutReleaser")
+  importJobs           ImportJob[]        @relation("ImportCreator")
+  assignedAppointments Appointment[]      @relation("AppointmentAssignee")
 
   @@unique([organizationId, email])
   @@index([organizationId, status])
@@ -314,6 +317,7 @@ model Company {
   listCompanies    SalesListCompany[]
   optOuts          OptOut[]
   importRows       ImportRow[]
+  appointments     Appointment[]
 
   @@unique([organizationId, corporateNumber])
   @@index([organizationId, isDeleted, updatedAt(sort: Desc)])
@@ -344,6 +348,7 @@ model CompanyContact {
   company            Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
   phoneNumbers       PhoneNumber[]
   optOuts            OptOut[]
+  appointments       Appointment[]
 
   @@index([organizationId, companyId, isDeleted])
   @@index([organizationId, email])
@@ -862,6 +867,7 @@ model Campaign {
   updatedAt            DateTime         @updatedAt @map("updated_at")
   targets              CampaignTarget[]
   jobs                 CallJob[]
+  appointments         Appointment[]
 
   @@index([organizationId, status])
   @@map("campaigns")
@@ -1332,28 +1338,29 @@ model ProductionIncident {
 }
 
 model RealtimeCallSession {
-  id                         String    @id @default(uuid()) @db.Uuid
-  organizationId             String    @map("organization_id") @db.Uuid
-  campaignId                 String    @map("campaign_id") @db.Uuid
-  executionId                String?   @map("execution_id") @db.Uuid
-  provider                   String    @default("fake")
-  providerSessionFingerprint String?   @map("provider_session_fingerprint")
-  streamFingerprint          String?   @map("stream_fingerprint")
-  status                     String    @default("reserved")
-  lastInboundSequence        Int       @default(-1) @map("last_inbound_sequence")
-  lastOutboundSequence       Int       @default(-1) @map("last_outbound_sequence")
-  activeGenerationId         String?   @map("active_generation_id")
-  resultCode                 String?   @map("result_code")
-  failureCode                String?   @map("failure_code")
-  inputAudioBytes            Int       @default(0) @map("input_audio_bytes")
-  outputAudioBytes           Int       @default(0) @map("output_audio_bytes")
-  inputTokens                Int       @default(0) @map("input_tokens")
-  outputTokens               Int       @default(0) @map("output_tokens")
-  startedAt                  DateTime? @map("started_at")
-  endedAt                    DateTime? @map("ended_at")
-  durationSeconds            Int?      @map("duration_seconds")
-  createdAt                  DateTime  @default(now()) @map("created_at")
-  updatedAt                  DateTime  @updatedAt @map("updated_at")
+  id                         String        @id @default(uuid()) @db.Uuid
+  organizationId             String        @map("organization_id") @db.Uuid
+  campaignId                 String        @map("campaign_id") @db.Uuid
+  executionId                String?       @map("execution_id") @db.Uuid
+  provider                   String        @default("fake")
+  providerSessionFingerprint String?       @map("provider_session_fingerprint")
+  streamFingerprint          String?       @map("stream_fingerprint")
+  status                     String        @default("reserved")
+  lastInboundSequence        Int           @default(-1) @map("last_inbound_sequence")
+  lastOutboundSequence       Int           @default(-1) @map("last_outbound_sequence")
+  activeGenerationId         String?       @map("active_generation_id")
+  resultCode                 String?       @map("result_code")
+  failureCode                String?       @map("failure_code")
+  inputAudioBytes            Int           @default(0) @map("input_audio_bytes")
+  outputAudioBytes           Int           @default(0) @map("output_audio_bytes")
+  inputTokens                Int           @default(0) @map("input_tokens")
+  outputTokens               Int           @default(0) @map("output_tokens")
+  startedAt                  DateTime?     @map("started_at")
+  endedAt                    DateTime?     @map("ended_at")
+  durationSeconds            Int?          @map("duration_seconds")
+  createdAt                  DateTime      @default(now()) @map("created_at")
+  updatedAt                  DateTime      @updatedAt @map("updated_at")
+  appointments               Appointment[]
 
   @@index([organizationId, status, createdAt(sort: Desc)])
   @@index([executionId])
@@ -1378,40 +1385,41 @@ model RealtimeCallEvent {
 }
 
 model HumanFollowupTask {
-  id                      String    @id @default(uuid()) @db.Uuid
-  organizationId          String    @map("organization_id") @db.Uuid
-  campaignId              String    @map("campaign_id") @db.Uuid
-  executionId             String?   @map("execution_id") @db.Uuid
-  realtimeSessionId       String    @map("realtime_session_id") @db.Uuid
-  phoneNumberId           String    @map("phone_number_id") @db.Uuid
-  companyId               String?   @map("company_id") @db.Uuid
-  contactId               String?   @map("contact_id") @db.Uuid
-  channel                 String    @default("zoom_phone")
-  source                  String    @default("ai_realtime")
-  reasonCode              String    @default("other") @map("reason_code")
-  status                  String    @default("open")
-  priority                String    @default("normal")
-  requestedTimeWindowCode String    @map("requested_time_window_code")
-  noteCode                String    @map("note_code")
-  assigneeUserId          String?   @map("assignee_user_id") @db.Uuid
-  dueAt                   DateTime? @map("due_at")
-  assignedAt              DateTime? @map("assigned_at")
-  firstOpenedAt           DateTime? @map("first_opened_at")
-  firstAttemptedAt        DateTime? @map("first_attempted_at")
-  firstConnectedAt        DateTime? @map("first_connected_at")
-  snoozedUntil            DateTime? @map("snoozed_until")
-  attemptCount            Int       @default(0) @map("attempt_count")
-  outcomeCode             String?   @map("outcome_code")
-  nextActionCode          String?   @map("next_action_code")
-  nextActionAt            DateTime? @map("next_action_at")
-  zoomCallFingerprint     String?   @map("zoom_call_fingerprint")
+  id                      String        @id @default(uuid()) @db.Uuid
+  organizationId          String        @map("organization_id") @db.Uuid
+  campaignId              String        @map("campaign_id") @db.Uuid
+  executionId             String?       @map("execution_id") @db.Uuid
+  realtimeSessionId       String        @map("realtime_session_id") @db.Uuid
+  phoneNumberId           String        @map("phone_number_id") @db.Uuid
+  companyId               String?       @map("company_id") @db.Uuid
+  contactId               String?       @map("contact_id") @db.Uuid
+  channel                 String        @default("zoom_phone")
+  source                  String        @default("ai_realtime")
+  reasonCode              String        @default("other") @map("reason_code")
+  status                  String        @default("open")
+  priority                String        @default("normal")
+  requestedTimeWindowCode String        @map("requested_time_window_code")
+  noteCode                String        @map("note_code")
+  assigneeUserId          String?       @map("assignee_user_id") @db.Uuid
+  dueAt                   DateTime?     @map("due_at")
+  assignedAt              DateTime?     @map("assigned_at")
+  firstOpenedAt           DateTime?     @map("first_opened_at")
+  firstAttemptedAt        DateTime?     @map("first_attempted_at")
+  firstConnectedAt        DateTime?     @map("first_connected_at")
+  snoozedUntil            DateTime?     @map("snoozed_until")
+  attemptCount            Int           @default(0) @map("attempt_count")
+  outcomeCode             String?       @map("outcome_code")
+  nextActionCode          String?       @map("next_action_code")
+  nextActionAt            DateTime?     @map("next_action_at")
+  zoomCallFingerprint     String?       @map("zoom_call_fingerprint")
   note                    String?
-  version                 Int       @default(0)
-  maskedDestination       String    @map("masked_destination")
-  completedAt             DateTime? @map("completed_at")
-  appointmentId           String?   @map("appointment_id") @db.Uuid
-  createdAt               DateTime  @default(now()) @map("created_at")
-  updatedAt               DateTime  @updatedAt @map("updated_at")
+  version                 Int           @default(0)
+  maskedDestination       String        @map("masked_destination")
+  completedAt             DateTime?     @map("completed_at")
+  appointmentId           String?       @map("appointment_id") @db.Uuid
+  createdAt               DateTime      @default(now()) @map("created_at")
+  updatedAt               DateTime      @updatedAt @map("updated_at")
+  appointments            Appointment[] @relation("AppointmentFollowupTask")
 
   @@unique([realtimeSessionId, channel])
   @@index([organizationId, status, createdAt(sort: Desc)])
@@ -1484,43 +1492,44 @@ model ZoomPhoneEvent {
 }
 
 model SalesHandoffCard {
-  id                        String    @id @default(uuid()) @db.Uuid
-  organizationId            String    @map("organization_id") @db.Uuid
-  campaignId                String    @map("campaign_id") @db.Uuid
-  executionId               String?   @map("execution_id") @db.Uuid
-  realtimeSessionId         String    @map("realtime_session_id") @db.Uuid
-  followupTaskId            String?   @map("followup_task_id") @db.Uuid
-  appointmentId             String?   @map("appointment_id") @db.Uuid
-  companyId                 String    @map("company_id") @db.Uuid
-  contactId                 String?   @map("contact_id") @db.Uuid
-  source                    String    @default("fake")
-  schemaVersion             Int       @default(1) @map("schema_version")
-  version                   Int       @default(1)
-  status                    String    @default("draft")
-  interestLevel             String    @default("unknown") @map("interest_level")
-  interestCodes             Json      @default("[]") @map("interest_codes")
-  painPointCodes            Json      @default("[]") @map("pain_point_codes")
-  objectionCodes            Json      @default("[]") @map("objection_codes")
-  decisionRole              String    @default("unknown") @map("decision_role")
-  timelineCode              String    @default("unknown") @map("timeline_code")
-  budgetSignal              String    @default("not_discussed") @map("budget_signal")
-  callbackRequested         Boolean   @default(false) @map("callback_requested")
-  callbackWindowCode        String?   @map("callback_window_code")
-  humanQuestionCodes        Json      @default("[]") @map("human_question_codes")
-  recommendedNextAction     String    @map("recommended_next_action")
-  confidenceBand            String    @map("confidence_band")
-  evidenceEventFingerprints Json      @default("[]") @map("evidence_event_fingerprints")
-  customerNeedSummary       String?   @map("customer_need_summary") @db.VarChar(200)
-  objectionSummary          String?   @map("objection_summary") @db.VarChar(200)
-  nextConversationHint      String?   @map("next_conversation_hint") @db.VarChar(200)
-  unansweredQuestionSummary String?   @map("unanswered_question_summary") @db.VarChar(200)
-  leadScore                 Int?      @map("lead_score")
-  scoreReasonCodes          Json      @default("[]") @map("score_reason_codes")
-  scoreRuleVersion          Int       @default(1) @map("score_rule_version")
-  finalizedAt               DateTime? @map("finalized_at")
-  expiresAt                 DateTime  @map("expires_at")
-  createdAt                 DateTime  @default(now()) @map("created_at")
-  updatedAt                 DateTime  @updatedAt @map("updated_at")
+  id                        String        @id @default(uuid()) @db.Uuid
+  organizationId            String        @map("organization_id") @db.Uuid
+  campaignId                String        @map("campaign_id") @db.Uuid
+  executionId               String?       @map("execution_id") @db.Uuid
+  realtimeSessionId         String        @map("realtime_session_id") @db.Uuid
+  followupTaskId            String?       @map("followup_task_id") @db.Uuid
+  appointmentId             String?       @map("appointment_id") @db.Uuid
+  companyId                 String        @map("company_id") @db.Uuid
+  contactId                 String?       @map("contact_id") @db.Uuid
+  source                    String        @default("fake")
+  schemaVersion             Int           @default(1) @map("schema_version")
+  version                   Int           @default(1)
+  status                    String        @default("draft")
+  interestLevel             String        @default("unknown") @map("interest_level")
+  interestCodes             Json          @default("[]") @map("interest_codes")
+  painPointCodes            Json          @default("[]") @map("pain_point_codes")
+  objectionCodes            Json          @default("[]") @map("objection_codes")
+  decisionRole              String        @default("unknown") @map("decision_role")
+  timelineCode              String        @default("unknown") @map("timeline_code")
+  budgetSignal              String        @default("not_discussed") @map("budget_signal")
+  callbackRequested         Boolean       @default(false) @map("callback_requested")
+  callbackWindowCode        String?       @map("callback_window_code")
+  humanQuestionCodes        Json          @default("[]") @map("human_question_codes")
+  recommendedNextAction     String        @map("recommended_next_action")
+  confidenceBand            String        @map("confidence_band")
+  evidenceEventFingerprints Json          @default("[]") @map("evidence_event_fingerprints")
+  customerNeedSummary       String?       @map("customer_need_summary") @db.VarChar(200)
+  objectionSummary          String?       @map("objection_summary") @db.VarChar(200)
+  nextConversationHint      String?       @map("next_conversation_hint") @db.VarChar(200)
+  unansweredQuestionSummary String?       @map("unanswered_question_summary") @db.VarChar(200)
+  leadScore                 Int?          @map("lead_score")
+  scoreReasonCodes          Json          @default("[]") @map("score_reason_codes")
+  scoreRuleVersion          Int           @default(1) @map("score_rule_version")
+  finalizedAt               DateTime?     @map("finalized_at")
+  expiresAt                 DateTime      @map("expires_at")
+  createdAt                 DateTime      @default(now()) @map("created_at")
+  updatedAt                 DateTime      @updatedAt @map("updated_at")
+  appointments              Appointment[] @relation("AppointmentHandoffCard")
 
   @@unique([realtimeSessionId, version])
   @@index([organizationId, status, createdAt(sort: Desc)])
@@ -1530,28 +1539,29 @@ model SalesHandoffCard {
 }
 
 model AppointmentPolicy {
-  id                          String    @id @default(uuid()) @db.Uuid
-  organizationId              String    @map("organization_id") @db.Uuid
+  id                          String        @id @default(uuid()) @db.Uuid
+  organizationId              String        @map("organization_id") @db.Uuid
   name                        String
   timezone                    String
-  meetingTypeCode             String    @map("meeting_type_code")
-  durationMinutes             Int       @map("duration_minutes")
-  bufferBeforeMinutes         Int       @default(0) @map("buffer_before_minutes")
-  bufferAfterMinutes          Int       @default(0) @map("buffer_after_minutes")
-  minimumNoticeMinutes        Int       @default(60) @map("minimum_notice_minutes")
-  maximumAdvanceDays          Int       @default(30) @map("maximum_advance_days")
-  holdTtlMinutes              Int       @default(10) @map("hold_ttl_minutes")
-  cancellationDeadlineMinutes Int       @default(60) @map("cancellation_deadline_minutes")
-  assignmentMode              String    @default("manual") @map("assignment_mode")
-  status                      String    @default("draft")
+  meetingTypeCode             String        @map("meeting_type_code")
+  durationMinutes             Int           @map("duration_minutes")
+  bufferBeforeMinutes         Int           @default(0) @map("buffer_before_minutes")
+  bufferAfterMinutes          Int           @default(0) @map("buffer_after_minutes")
+  minimumNoticeMinutes        Int           @default(60) @map("minimum_notice_minutes")
+  maximumAdvanceDays          Int           @default(30) @map("maximum_advance_days")
+  holdTtlMinutes              Int           @default(10) @map("hold_ttl_minutes")
+  cancellationDeadlineMinutes Int           @default(60) @map("cancellation_deadline_minutes")
+  assignmentMode              String        @default("manual") @map("assignment_mode")
+  status                      String        @default("draft")
   version                     Int
-  validFrom                   DateTime? @map("valid_from")
-  validUntil                  DateTime? @map("valid_until")
-  createdBy                   String    @map("created_by") @db.Uuid
-  publishedBy                 String?   @map("published_by") @db.Uuid
-  publishedAt                 DateTime? @map("published_at")
-  createdAt                   DateTime  @default(now()) @map("created_at")
-  updatedAt                   DateTime  @updatedAt @map("updated_at")
+  validFrom                   DateTime?     @map("valid_from")
+  validUntil                  DateTime?     @map("valid_until")
+  createdBy                   String        @map("created_by") @db.Uuid
+  publishedBy                 String?       @map("published_by") @db.Uuid
+  publishedAt                 DateTime?     @map("published_at")
+  createdAt                   DateTime      @default(now()) @map("created_at")
+  updatedAt                   DateTime      @updatedAt @map("updated_at")
+  appointments                Appointment[]
 
   @@unique([organizationId, name, version])
   @@index([organizationId, status])
@@ -1592,36 +1602,46 @@ model AvailabilityException {
 }
 
 model Appointment {
-  id                       String    @id @default(uuid()) @db.Uuid
-  organizationId           String    @map("organization_id") @db.Uuid
-  campaignId               String    @map("campaign_id") @db.Uuid
-  companyId                String    @map("company_id") @db.Uuid
-  contactId                String?   @map("contact_id") @db.Uuid
-  executionId              String?   @map("execution_id") @db.Uuid
-  realtimeSessionId        String?   @map("realtime_session_id") @db.Uuid
-  handoffCardId            String?   @map("handoff_card_id") @db.Uuid
-  followupTaskId           String?   @map("followup_task_id") @db.Uuid
-  assigneeUserId           String    @map("assignee_user_id") @db.Uuid
-  policyVersionId          String    @map("policy_version_id") @db.Uuid
-  status                   String    @default("held")
-  startAt                  DateTime  @map("start_at")
-  endAt                    DateTime  @map("end_at")
-  busyStartAt              DateTime  @map("busy_start_at")
-  busyEndAt                DateTime  @map("busy_end_at")
-  displayTimezone          String    @map("display_timezone")
-  holdExpiresAt            DateTime? @map("hold_expires_at")
-  confirmationSource       String    @map("confirmation_source")
-  meetingTypeCode          String    @map("meeting_type_code")
-  locationType             String    @default("undecided") @map("location_type")
-  externalProvider         String    @default("none") @map("external_provider")
-  externalEventFingerprint String?   @map("external_event_fingerprint")
-  idempotencyKey           String    @map("idempotency_key")
-  version                  Int       @default(0)
-  confirmedAt              DateTime? @map("confirmed_at")
-  cancelledAt              DateTime? @map("cancelled_at")
-  completedAt              DateTime? @map("completed_at")
-  createdAt                DateTime  @default(now()) @map("created_at")
-  updatedAt                DateTime  @updatedAt @map("updated_at")
+  id                       String               @id @default(uuid()) @db.Uuid
+  organizationId           String               @map("organization_id") @db.Uuid
+  campaignId               String               @map("campaign_id") @db.Uuid
+  companyId                String               @map("company_id") @db.Uuid
+  contactId                String?              @map("contact_id") @db.Uuid
+  executionId              String?              @map("execution_id") @db.Uuid
+  realtimeSessionId        String?              @map("realtime_session_id") @db.Uuid
+  handoffCardId            String?              @map("handoff_card_id") @db.Uuid
+  followupTaskId           String?              @map("followup_task_id") @db.Uuid
+  assigneeUserId           String               @map("assignee_user_id") @db.Uuid
+  policyVersionId          String               @map("policy_version_id") @db.Uuid
+  status                   String               @default("held")
+  startAt                  DateTime             @map("start_at")
+  endAt                    DateTime             @map("end_at")
+  busyStartAt              DateTime             @map("busy_start_at")
+  busyEndAt                DateTime             @map("busy_end_at")
+  displayTimezone          String               @map("display_timezone")
+  holdExpiresAt            DateTime?            @map("hold_expires_at")
+  confirmationSource       String               @map("confirmation_source")
+  meetingTypeCode          String               @map("meeting_type_code")
+  locationType             String               @default("undecided") @map("location_type")
+  externalProvider         String               @default("none") @map("external_provider")
+  externalEventFingerprint String?              @map("external_event_fingerprint")
+  idempotencyKey           String               @map("idempotency_key")
+  version                  Int                  @default(0)
+  confirmedAt              DateTime?            @map("confirmed_at")
+  cancelledAt              DateTime?            @map("cancelled_at")
+  completedAt              DateTime?            @map("completed_at")
+  createdAt                DateTime             @default(now()) @map("created_at")
+  updatedAt                DateTime             @updatedAt @map("updated_at")
+  organization             Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  campaign                 Campaign             @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  company                  Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  contact                  CompanyContact?      @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  assignee                 User                 @relation("AppointmentAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  policyVersion            AppointmentPolicy    @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+  realtimeSession          RealtimeCallSession? @relation(fields: [realtimeSessionId], references: [id], onDelete: Restrict)
+  handoffCard              SalesHandoffCard?    @relation("AppointmentHandoffCard", fields: [handoffCardId], references: [id], onDelete: Restrict)
+  followupTask             HumanFollowupTask?   @relation("AppointmentFollowupTask", fields: [followupTaskId], references: [id], onDelete: Restrict)
+  events                   AppointmentEvent[]
 
   @@unique([organizationId, idempotencyKey])
   @@index([organizationId, assigneeUserId, startAt])
@@ -1630,17 +1650,19 @@ model Appointment {
 }
 
 model AppointmentEvent {
-  id                String   @id @default(uuid()) @db.Uuid
-  organizationId    String   @map("organization_id") @db.Uuid
-  appointmentId     String   @map("appointment_id") @db.Uuid
+  id                String       @id @default(uuid()) @db.Uuid
+  organizationId    String       @map("organization_id") @db.Uuid
+  appointmentId     String       @map("appointment_id") @db.Uuid
   type              String
-  actorType         String   @map("actor_type")
-  actorId           String?  @map("actor_id") @db.Uuid
-  reasonCode        String   @map("reason_code")
-  beforeStatus      String?  @map("before_status")
-  afterStatus       String?  @map("after_status")
-  sanitizedMetadata Json     @default("{}") @map("sanitized_metadata")
-  occurredAt        DateTime @default(now()) @map("occurred_at")
+  actorType         String       @map("actor_type")
+  actorId           String?      @map("actor_id") @db.Uuid
+  reasonCode        String       @map("reason_code")
+  beforeStatus      String?      @map("before_status")
+  afterStatus       String?      @map("after_status")
+  sanitizedMetadata Json         @default("{}") @map("sanitized_metadata")
+  occurredAt        DateTime     @default(now()) @map("occurred_at")
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  appointment       Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, appointmentId, occurredAt], map: "appointment_events_organization_id_appointment_id_occurred_at_i")
   @@map("appointment_events")

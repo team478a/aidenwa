@@ -294,7 +294,31 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
   PASS.
 - lint/format/typecheck, all 8 E2E and Web/API/Worker production build: PASS.
 - GitHub Actions: run `30084030037` PASS for Phase 4 commit `f14d7fe`.
-- Phase 5 and later: not started.
+- External Provider/API/real telephone calls: 0.
+
+## Maintainability remediation Phase 5
+
+- Status: locally complete; GitHub Actions pending.
+- Appointment transitions use an explicit state machine with terminal-state protection.
+- Completion/no-show before `startAt` and cancellation after the policy deadline are rejected.
+- Rescheduling now passes through `confirmed -> reschedule_requested -> confirmed`.
+- Appointment update/version, AppointmentEvent, notification, and applicable handoff/follow-up
+  updates commit in one transaction; a forced Event failure test proves rollback.
+- Slot token JSON is strictly Zod-validated for UUIDs, timestamps, IANA timezone, expiry and time
+  order.
+- Policy/rule validity periods, notice, advance, duration and hold TTL are applied during slot
+  generation and rechecked during hold/reschedule.
+- Cross-organization campaign, company, contact, assignee, realtime session, handoff card and
+  follow-up task references are rejected by the service.
+- Migrations `20260724050000_phase5_appointment_integrity` and
+  `20260724051000_phase5_appointment_period_checks` add state/period constraints, overlap handling,
+  Appointment relations and foreign keys.
+- Appointment-focused tests: 28 PASS. Unit/API/Worker: 27 files, 150 tests PASS.
+- Prisma format/validate/generate, all 16 migrations on an empty DB, E2E seed and zero schema drift:
+  PASS.
+- lint/format/typecheck, all 8 E2E (including invalid transition HTTP 409) and Web/API/Worker
+  production build: PASS.
+- Phase 6 and later: not started.
 - External Provider/API/real telephone calls: 0.
 
 ## Temporary implementation / known issues

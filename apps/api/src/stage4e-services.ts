@@ -1,30 +1,32 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@sales-ai/database';
+import { appointmentSlotPayloadSchema } from '@sales-ai/validation';
+import { assertAppointmentTransition, type AppointmentAction } from './appointment-state.js';
 
-type SlotPayload = {
-  organizationId: string;
-  userId: string;
-  policyId: string;
-  start: string;
-  end: string;
-  timezone: string;
-  expires: string;
-};
+type SlotPayload = ReturnType<typeof appointmentSlotPayloadSchema.parse>;
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
 export function signSlot(payload: SlotPayload, secret: string) {
   const body = encode(payload);
   const signature = createHmac('sha256', secret).update(body).digest('base64url');
   return `${body}.${signature}`;
 }
-export function verifySlot(token: string, secret: string): SlotPayload {
+export function verifySlot(token: string, secret: string, now = new Date()): SlotPayload {
   const [body, signature] = token.split('.');
   if (!body || !signature) throw new Error('SLOT_TOKEN_INVALID');
   const expected = createHmac('sha256', secret).update(body).digest();
   const actual = Buffer.from(signature, 'base64url');
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
     throw new Error('SLOT_TOKEN_INVALID');
-  const value = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as SlotPayload;
-  if (new Date(value.expires) <= new Date()) throw new Error('SLOT_TOKEN_EXPIRED');
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+  } catch {
+    throw new Error('SLOT_TOKEN_INVALID');
+  }
+  const parsed = appointmentSlotPayloadSchema.safeParse(decoded);
+  if (!parsed.success) throw new Error('SLOT_TOKEN_INVALID');
+  const value = parsed.data;
+  if (new Date(value.expires) <= now) throw new Error('SLOT_TOKEN_EXPIRED');
   return value;
 }
 function localParts(date: Date, timezone: string) {
@@ -45,6 +47,23 @@ function localParts(date: Date, timezone: string) {
     time: `${get('hour')}:${get('minute')}`,
     weekday: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(get('weekday')),
   };
+}
+function inEffectivePeriod(
+  value: Date,
+  range: { validFrom?: Date | null; validUntil?: Date | null },
+) {
+  return (
+    (!range.validFrom || range.validFrom <= value) &&
+    (!range.validUntil || range.validUntil >= value)
+  );
+}
+function ruleAppliesOnLocalDate(
+  rule: { effectiveFrom: Date | null; effectiveUntil: Date | null },
+  localDate: string,
+) {
+  const from = rule.effectiveFrom?.toISOString().slice(0, 10);
+  const until = rule.effectiveUntil?.toISOString().slice(0, 10);
+  return (!from || from <= localDate) && (!until || until >= localDate);
 }
 export async function findAppointmentSlots(
   prisma: PrismaClient,
@@ -108,11 +127,13 @@ export async function findAppointmentSlots(
   for (; cursor < latest && slots.length < 3; cursor.setTime(cursor.getTime() + 1_800_000)) {
     const end = new Date(cursor.getTime() + policy.durationMinutes * 60_000);
     if (end > latest) break;
+    if (!inEffectivePeriod(cursor, policy) || !inEffectivePeriod(end, policy)) continue;
     const local = localParts(cursor, input.timezone);
     const endLocal = localParts(end, input.timezone);
     const rule = rules.find(
       (item) =>
         item.weekday === local.weekday &&
+        ruleAppliesOnLocalDate(item, local.date) &&
         item.startLocalTime <= local.time &&
         item.endLocalTime >= endLocal.time,
     );
@@ -132,7 +153,7 @@ export async function findAppointmentSlots(
     const busyStart = new Date(cursor.getTime() - policy.bufferBeforeMinutes * 60_000);
     const busyEnd = new Date(end.getTime() + policy.bufferAfterMinutes * 60_000);
     if (busy.some((item) => item.busyStartAt < busyEnd && item.busyEndAt > busyStart)) continue;
-    const expiresAt = new Date(Math.min(Date.now() + 5 * 60_000, cursor.getTime()));
+    const expiresAt = new Date(Math.min(now.getTime() + 5 * 60_000, cursor.getTime()));
     slots.push({
       startAt: new Date(cursor),
       endAt: end,
@@ -170,40 +191,119 @@ export async function holdAppointment(
     handoffCardId?: string;
     followupTaskId?: string;
     confirmationSource?: 'fake' | 'sales_user' | 'admin';
+    now?: Date;
   },
 ) {
-  const payload = verifySlot(input.token, input.secret);
+  const now = input.now ?? new Date();
+  const payload = verifySlot(input.token, input.secret, now);
   if (payload.organizationId !== input.organizationId || payload.userId !== input.userId)
     throw new Error('SLOT_SCOPE_INVALID');
-  const [policy, company, optOut, stop] = await Promise.all([
-    prisma.appointmentPolicy.findFirst({
-      where: { id: payload.policyId, organizationId: input.organizationId, status: 'published' },
-    }),
-    prisma.company.findFirst({
-      where: { id: input.companyId, organizationId: input.organizationId, isDeleted: false },
-    }),
-    prisma.optOut.findFirst({
-      where: {
-        organizationId: input.organizationId,
-        companyId: input.companyId,
-        status: 'active',
-        channel: { in: ['all', 'phone'] },
-      },
-    }),
-    prisma.emergencyStop.findFirst({
-      where: {
-        active: true,
-        OR: [
-          { scope: 'system' },
-          { scope: 'organization', organizationId: input.organizationId },
-          { scope: 'campaign', organizationId: input.organizationId, scopeId: input.campaignId },
-        ],
-      },
-    }),
-  ]);
-  if (!policy || !company) throw new Error('APPOINTMENT_SCOPE_INVALID');
+  const [policy, assignee, campaign, company, contact, session, card, task, optOut, stop, rules] =
+    await Promise.all([
+      prisma.appointmentPolicy.findFirst({
+        where: { id: payload.policyId, organizationId: input.organizationId, status: 'published' },
+      }),
+      prisma.user.findFirst({
+        where: { id: input.userId, organizationId: input.organizationId, status: 'active' },
+        select: { id: true },
+      }),
+      prisma.campaign.findFirst({
+        where: { id: input.campaignId, organizationId: input.organizationId },
+        select: { id: true },
+      }),
+      prisma.company.findFirst({
+        where: { id: input.companyId, organizationId: input.organizationId, isDeleted: false },
+      }),
+      input.contactId
+        ? prisma.companyContact.findFirst({
+            where: {
+              id: input.contactId,
+              organizationId: input.organizationId,
+              companyId: input.companyId,
+              isDeleted: false,
+            },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+      input.realtimeSessionId
+        ? prisma.realtimeCallSession.findFirst({
+            where: { id: input.realtimeSessionId, organizationId: input.organizationId },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+      input.handoffCardId
+        ? prisma.salesHandoffCard.findFirst({
+            where: { id: input.handoffCardId, organizationId: input.organizationId },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+      input.followupTaskId
+        ? prisma.humanFollowupTask.findFirst({
+            where: { id: input.followupTaskId, organizationId: input.organizationId },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+      prisma.optOut.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          companyId: input.companyId,
+          status: 'active',
+          channel: { in: ['all', 'phone'] },
+        },
+      }),
+      prisma.emergencyStop.findFirst({
+        where: {
+          active: true,
+          OR: [
+            { scope: 'system' },
+            { scope: 'organization', organizationId: input.organizationId },
+            { scope: 'campaign', organizationId: input.organizationId, scopeId: input.campaignId },
+          ],
+        },
+      }),
+      prisma.availabilityRule.findMany({
+        where: {
+          organizationId: input.organizationId,
+          userId: input.userId,
+          timezone: payload.timezone,
+          active: true,
+        },
+      }),
+    ]);
+  if (
+    !policy ||
+    !assignee ||
+    !campaign ||
+    !company ||
+    (input.contactId && !contact) ||
+    (input.realtimeSessionId && !session) ||
+    (input.handoffCardId && !card) ||
+    (input.followupTaskId && !task)
+  )
+    throw new Error('APPOINTMENT_SCOPE_INVALID');
   if (optOut) throw new Error('OPT_OUT');
   if (stop) throw new Error('EMERGENCY_STOP_ACTIVE');
+  const startAt = new Date(payload.start);
+  const endAt = new Date(payload.end);
+  const local = localParts(startAt, payload.timezone);
+  const endLocal = localParts(endAt, payload.timezone);
+  const rule = rules.find(
+    (item) =>
+      item.weekday === local.weekday &&
+      ruleAppliesOnLocalDate(item, local.date) &&
+      item.startLocalTime <= local.time &&
+      item.endLocalTime >= endLocal.time,
+  );
+  if (
+    policy.timezone !== payload.timezone ||
+    !inEffectivePeriod(startAt, policy) ||
+    !inEffectivePeriod(endAt, policy) ||
+    endAt.getTime() - startAt.getTime() !== policy.durationMinutes * 60_000 ||
+    startAt < new Date(now.getTime() + policy.minimumNoticeMinutes * 60_000) ||
+    startAt > new Date(now.getTime() + policy.maximumAdvanceDays * 86_400_000) ||
+    !rule
+  )
+    throw new Error('SLOT_POLICY_INVALID');
   const existing = await prisma.appointment.findUnique({
     where: {
       organizationId_idempotencyKey: {
@@ -213,8 +313,6 @@ export async function holdAppointment(
     },
   });
   if (existing) return existing;
-  const startAt = new Date(payload.start);
-  const endAt = new Date(payload.end);
   try {
     return await prisma.$transaction(async (tx) => {
       const appointment = await tx.appointment.create({
@@ -233,7 +331,7 @@ export async function holdAppointment(
           busyStartAt: new Date(startAt.getTime() - policy.bufferBeforeMinutes * 60_000),
           busyEndAt: new Date(endAt.getTime() + policy.bufferAfterMinutes * 60_000),
           displayTimezone: payload.timezone,
-          holdExpiresAt: new Date(Date.now() + policy.holdTtlMinutes * 60_000),
+          holdExpiresAt: new Date(now.getTime() + policy.holdTtlMinutes * 60_000),
           confirmationSource: input.confirmationSource ?? 'fake',
           meetingTypeCode: policy.meetingTypeCode,
           idempotencyKey: input.idempotencyKey,
@@ -264,52 +362,52 @@ export async function transitionAppointment(
     id: string;
     version: number;
     actorUserId: string;
-    action: 'confirm' | 'cancel' | 'complete' | 'no_show';
+    action: AppointmentAction;
     reasonCode: string;
     customerConfirmed?: boolean;
+    now?: Date;
   },
 ) {
-  const current = await prisma.appointment.findFirst({
-    where: { id: input.id, organizationId: input.organizationId },
-  });
-  if (!current) throw new Error('APPOINTMENT_NOT_FOUND');
-  if (
-    input.action === 'confirm' &&
-    (!input.customerConfirmed ||
-      current.status !== 'held' ||
-      !current.holdExpiresAt ||
-      current.holdExpiresAt <= new Date())
-  )
-    throw new Error('APPOINTMENT_CONFIRM_REJECTED');
-  const next =
-    input.action === 'confirm'
-      ? 'confirmed'
-      : input.action === 'no_show'
-        ? 'no_show'
-        : input.action === 'complete'
-          ? 'completed'
-          : 'cancelled';
-  const changed = await prisma.appointment.updateMany({
-    where: {
-      id: current.id,
-      organizationId: input.organizationId,
-      version: input.version,
-      status:
-        input.action === 'confirm'
-          ? 'held'
-          : { notIn: ['cancelled', 'completed', 'no_show', 'expired'] },
-    },
-    data: {
-      status: next,
-      version: { increment: 1 },
-      ...(next === 'confirmed' ? { confirmedAt: new Date(), holdExpiresAt: null } : {}),
-      ...(next === 'cancelled' ? { cancelledAt: new Date() } : {}),
-      ...(['completed', 'no_show'].includes(next) ? { completedAt: new Date() } : {}),
-    },
-  });
-  if (!changed.count) throw new Error('APPOINTMENT_VERSION_CONFLICT');
-  const updated = await prisma.appointment.findUniqueOrThrow({ where: { id: current.id } });
-  await prisma.$transaction(async (tx) => {
+  const now = input.now ?? new Date();
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.appointment.findFirst({
+      where: { id: input.id, organizationId: input.organizationId },
+    });
+    if (!current) throw new Error('APPOINTMENT_NOT_FOUND');
+    const policy = await tx.appointmentPolicy.findFirst({
+      where: { id: current.policyVersionId, organizationId: input.organizationId },
+      select: { cancellationDeadlineMinutes: true },
+    });
+    if (!policy) throw new Error('APPOINTMENT_SCOPE_INVALID');
+    if (
+      input.action === 'confirm' &&
+      (!input.customerConfirmed || !current.holdExpiresAt || current.holdExpiresAt <= now)
+    )
+      throw new Error('APPOINTMENT_CONFIRM_REJECTED');
+    const next = assertAppointmentTransition({
+      current: current.status,
+      action: input.action,
+      startAt: current.startAt,
+      cancellationDeadlineMinutes: policy.cancellationDeadlineMinutes,
+      now,
+    });
+    const changed = await tx.appointment.updateMany({
+      where: {
+        id: current.id,
+        organizationId: input.organizationId,
+        version: input.version,
+        status: current.status,
+      },
+      data: {
+        status: next,
+        version: { increment: 1 },
+        ...(next === 'confirmed' ? { confirmedAt: now, holdExpiresAt: null } : {}),
+        ...(next === 'cancelled' ? { cancelledAt: now } : {}),
+        ...(['completed', 'no_show'].includes(next) ? { completedAt: now } : {}),
+      },
+    });
+    if (!changed.count) throw new Error('APPOINTMENT_VERSION_CONFLICT');
+    const updated = await tx.appointment.findUniqueOrThrow({ where: { id: current.id } });
     await tx.appointmentEvent.create({
       data: {
         organizationId: input.organizationId,
@@ -347,8 +445,8 @@ export async function transitionAppointment(
           nextActionAt: current.startAt,
         },
       });
+    return updated;
   });
-  return updated;
 }
 
 export async function rescheduleAppointment(
@@ -361,9 +459,11 @@ export async function rescheduleAppointment(
     token: string;
     secret: string;
     reasonCode: string;
+    now?: Date;
   },
 ) {
-  const payload = verifySlot(input.token, input.secret);
+  const now = input.now ?? new Date();
+  const payload = verifySlot(input.token, input.secret, now);
   const current = await prisma.appointment.findFirst({
     where: { id: input.id, organizationId: input.organizationId },
   });
@@ -371,22 +471,50 @@ export async function rescheduleAppointment(
     !current ||
     payload.organizationId !== input.organizationId ||
     payload.userId !== current.assigneeUserId ||
-    !['confirmed', 'reschedule_requested'].includes(current.status)
+    current.status !== 'reschedule_requested'
   )
     throw new Error('RESCHEDULE_REJECTED');
-  const policy = await prisma.appointmentPolicy.findFirst({
-    where: { id: payload.policyId, organizationId: input.organizationId, status: 'published' },
-  });
-  if (!policy) throw new Error('RESCHEDULE_REJECTED');
+  const [policy, rules] = await Promise.all([
+    prisma.appointmentPolicy.findFirst({
+      where: { id: payload.policyId, organizationId: input.organizationId, status: 'published' },
+    }),
+    prisma.availabilityRule.findMany({
+      where: {
+        organizationId: input.organizationId,
+        userId: current.assigneeUserId,
+        timezone: payload.timezone,
+        active: true,
+      },
+    }),
+  ]);
+  if (!policy || policy.timezone !== payload.timezone) throw new Error('RESCHEDULE_REJECTED');
   const startAt = new Date(payload.start);
   const endAt = new Date(payload.end);
+  const local = localParts(startAt, payload.timezone);
+  const endLocal = localParts(endAt, payload.timezone);
+  if (
+    !inEffectivePeriod(startAt, policy) ||
+    !inEffectivePeriod(endAt, policy) ||
+    endAt.getTime() - startAt.getTime() !== policy.durationMinutes * 60_000 ||
+    startAt < new Date(now.getTime() + policy.minimumNoticeMinutes * 60_000) ||
+    startAt > new Date(now.getTime() + policy.maximumAdvanceDays * 86_400_000) ||
+    !rules.some(
+      (item) =>
+        item.weekday === local.weekday &&
+        ruleAppliesOnLocalDate(item, local.date) &&
+        item.startLocalTime <= local.time &&
+        item.endLocalTime >= endLocal.time,
+    )
+  )
+    throw new Error('RESCHEDULE_REJECTED');
   try {
     return await prisma.$transaction(async (tx) => {
       const changed = await tx.appointment.updateMany({
         where: {
           id: current.id,
+          organizationId: input.organizationId,
           version: input.version,
-          status: { in: ['confirmed', 'reschedule_requested'] },
+          status: 'reschedule_requested',
         },
         data: {
           startAt,
@@ -427,6 +555,11 @@ export async function rescheduleAppointment(
         },
         update: {},
       });
+      if (current.followupTaskId)
+        await tx.humanFollowupTask.updateMany({
+          where: { id: current.followupTaskId, organizationId: input.organizationId },
+          data: { appointmentId: current.id, nextActionCode: 'appointment', nextActionAt: startAt },
+        });
       return tx.appointment.findUniqueOrThrow({ where: { id: current.id } });
     });
   } catch (cause) {

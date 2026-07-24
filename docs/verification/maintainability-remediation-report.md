@@ -131,3 +131,27 @@ Final Phase 2 verification:
 - GitHub Actions: run `30084030037` PASS for Phase 4 commit `f14d7fe`.
 - Existing non-blocking Next.js ESLint plugin detection warning remains unchanged.
 - External provider calls / real calls: 0.
+
+## Phase 5 — Appointment state and consistency
+
+- Scope: Phase 5 only; Phase 6 and later remain unimplemented.
+- Added the documented `held`, `confirmed`, `reschedule_requested` and terminal transition graph.
+- Invalid terminal transitions, completion/no-show before start, and late cancellation fail closed.
+- Appointment state/version, AppointmentEvent, deduplicated notification and applicable linked
+  record updates use one transaction.
+- A forced AppointmentEvent failure rolls the appointment update back; concurrent confirmation
+  creates one state change and one Event.
+- Slot tokens receive strict Zod structural validation before use.
+- Policy and AvailabilityRule validity periods, minimum notice, maximum advance, duration,
+  cancellation deadline and hold TTL are enforced.
+- Appointment creation revalidates every referenced row against the organization.
+- Two Phase 5 migrations add foreign keys/Prisma relations, allowed-state and validity-period
+  checks, and retain overlap protection during reschedule requests.
+- Appointment-focused tests: 28 PASS.
+- Unit/API/Worker: 27 files, 150 tests PASS.
+- Prisma format/validate/generate: PASS.
+- Empty database: all 16 migrations + E2E seed; Prisma drift: none.
+- lint/format/serial typecheck, 8 E2E tests and Web/API/Worker production build: PASS.
+- GitHub Actions: pending until push.
+- Existing non-blocking Next.js ESLint plugin detection warning remains unchanged.
+- External provider/calendar calls / real calls: 0.

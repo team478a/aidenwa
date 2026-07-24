@@ -150,6 +150,18 @@ test('Stage 4C-4E creates a safe follow-up, handoff, and internal appointment', 
       },
     });
     expect(confirmed.ok(), await confirmed.text()).toBeTruthy();
+    const invalidTransition = await page.request.post(
+      `/backend/appointments/${appointment.id}/confirm`,
+      {
+        headers,
+        data: {
+          version: appointment.version + 1,
+          customerConfirmed: true,
+          confirmationCode: 'duplicate_confirmation',
+        },
+      },
+    );
+    expect(invalidTransition.status()).toBe(409);
 
     await page.goto('/appointments');
     await expect(page.getByRole('heading', { name: '今日の商談予定' })).toBeVisible();
