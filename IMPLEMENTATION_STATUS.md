@@ -298,7 +298,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 
 ## Maintainability remediation Phase 5
 
-- Status: locally complete; GitHub Actions pending.
+- Status: complete.
 - Appointment transitions use an explicit state machine with terminal-state protection.
 - Completion/no-show before `startAt` and cancellation after the policy deadline are rejected.
 - Rescheduling now passes through `confirmed -> reschedule_requested -> confirmed`.
@@ -318,6 +318,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
   PASS.
 - lint/format/typecheck, all 8 E2E (including invalid transition HTTP 409) and Web/API/Worker
   production build: PASS.
+- GitHub Actions: run `30089496742` PASS for Phase 5 commit `4a9714a`.
 - Phase 6 and later: not started.
 - External Provider/API/real telephone calls: 0.
 
