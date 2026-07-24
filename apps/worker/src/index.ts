@@ -23,11 +23,7 @@ const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 const queue = new Queue('sales-ai-jobs', { connection });
 const prisma = new PrismaClient({
   datasources: {
-    db: {
-      url:
-        process.env.DATABASE_URL ??
-        'postgresql://sales_ai:sales_ai_dev@localhost:5432/sales_ai?schema=public',
-    },
+    db: { url: env.DATABASE_URL },
   },
 });
 

@@ -111,3 +111,23 @@ Final Phase 2 verification:
 - lint/format/typecheck, 8 E2E tests and Web/API/Worker production build: PASS.
 - GitHub Actions: run `30068669227` PASS for Phase 3 commit `ac2398c`.
 - External provider calls / real calls: 0.
+
+## Phase 4 — Production environment fail-fast
+
+- Scope: Phase 4 only; Phase 5 and later remain unimplemented.
+- API and Worker use the same production refinement in `@sales-ai/validation/env`.
+- Core database, Redis, web origin and application secrets fail startup validation when missing or
+  unsafe.
+- Localhost, loopback, `.example.local`, known development values, `replace-with-...` and
+  `uncommitted` are rejected in production.
+- Twilio, OpenAI Realtime and Zoom requirements are conditional on their feature switches.
+- Worker uses the parsed shared `DATABASE_URL` and has no separate fallback.
+- Focused environment validation: 18 tests PASS, including secret non-disclosure.
+- Unit/API/Worker: 26 files, 130 tests PASS with two local workers. An unrestricted run produced one
+  resource-contention API health timeout; isolated and bounded reruns passed.
+- Prisma format/validate/generate: PASS.
+- Empty database: all 14 migrations + E2E seed; Prisma drift: none.
+- lint/format/serial typecheck, 8 E2E tests and Web/API/Worker production build: PASS.
+- GitHub Actions: pending until push.
+- Existing non-blocking Next.js ESLint plugin detection warning remains unchanged.
+- External provider calls / real calls: 0.

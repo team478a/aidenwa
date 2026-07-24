@@ -27,13 +27,17 @@ const provider = new TwilioVoiceProvider(
 );
 const env = {
   NODE_ENV: 'test',
+  DATABASE_URL: databaseUrl,
   REDIS_URL: 'redis://127.0.0.1:6379',
+  WEB_ORIGIN: 'http://127.0.0.1:3000',
   WORKER_HEALTH_KEY: 'test',
   VOICE_PROVIDER: 'mock',
   PRODUCTION_CALLS_ENABLED: false,
   PRODUCTION_PROVIDER_ALLOWLIST: 'mock',
   RELEASE_COMMIT: 'uncommitted',
   SOURCE_NUMBER_FINGERPRINT_KEY: 'stage4b-test-fingerprint-key',
+  MOCK_WEBHOOK_SECRET: 'stage4a-test-mock-secret',
+  APPOINTMENT_SLOT_TOKEN_SECRET: 'stage4e-test-slot-token-secret-32',
   TWILIO_MAX_CALL_SECONDS: 120,
   TWILIO_ESTIMATED_COST_MINOR_PER_MINUTE: 100,
   TWILIO_VOICE_NAME: 'Polly.Mizuki',

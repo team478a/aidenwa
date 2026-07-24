@@ -273,7 +273,27 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
   PASS.
 - lint/format/typecheck, all 8 E2E and Web/API/Worker production build: PASS.
 - GitHub Actions: run `30068669227` PASS for Phase 3 commit `ac2398c`.
-- Phase 4 and later: not started.
+- External Provider/API/real telephone calls: 0.
+
+## Maintainability remediation Phase 4
+
+- Status: locally complete; GitHub Actions pending.
+- API and Worker now share production fail-fast validation from `@sales-ai/validation/env`.
+- Production rejects missing core endpoints/secrets, local or `.example.local` endpoints, repository
+  placeholder secrets, `replace-with-...`, `uncommitted` and an API loopback bind address.
+- Twilio, OpenAI Realtime and Zoom values become required only when their corresponding feature is
+  enabled.
+- Validation errors identify variable names without including rejected secret values.
+- Worker no longer has an independent development `DATABASE_URL` fallback.
+- Development/test local defaults remain available.
+- Environment validation: 18 focused tests PASS.
+- Unit/API/Worker: 26 files, 130 tests PASS with local workers limited to two. An initial
+  unrestricted run had one existing API health timeout under host contention; isolated and bounded
+  reruns passed.
+- Prisma format/validate/generate, all 14 migrations on an empty DB, E2E seed and zero schema drift:
+  PASS.
+- lint/format/typecheck, all 8 E2E and Web/API/Worker production build: PASS.
+- Phase 5 and later: not started.
 - External Provider/API/real telephone calls: 0.
 
 ## Temporary implementation / known issues
