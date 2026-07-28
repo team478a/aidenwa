@@ -325,7 +325,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 
 ## Maintainability remediation Phase 6
 
-- Status: complete locally.
+- Status: complete.
 - Twilio webhook handling now verifies the signature before Zod validation and never creates a
   ProviderWebhookEvent for invalid signatures or invalid callback values.
 - Valid callbacks are stored as `received` together with a transactional `provider-webhook`
@@ -348,7 +348,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Unit/API/Worker: 27 files, 153 tests PASS.
 - E2E: 8/8 PASS.
 - Web/API/Worker production build: PASS.
-- GitHub Actions: pending push.
+- GitHub Actions: run `30343446120` PASS for Phase 6 commit `7df092e`.
 - Phase 7 and later were not changed. External Provider/API/real telephone calls: 0.
 
 ## Temporary implementation / known issues
