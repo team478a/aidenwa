@@ -396,6 +396,23 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - GitHub Actions: run `30348610326` PASS for commit `408ec82`.
 - Additional fixes 5.2–5.4 are not started. External Provider/API/real telephone calls: 0.
 
+## Additional fix 5.2 — Next.js API destination
+
+- Status: implementation and local verification complete.
+- Replaced the fixed Next.js rewrite destination with the validated `API_INTERNAL_URL`.
+- Only `NODE_ENV=development` may omit the variable and use
+  `http://127.0.0.1:3001`; test and production fail fast when it is absent.
+- HTTP(S) is required. Credentials, query strings and fragments are rejected, and trailing
+  slashes are normalized before `/api/v1/:path*` is appended.
+- `.env.example` and GitHub Actions now declare the internal API URL explicitly.
+- Focused `resolveApiInternalUrl` tests: 8 PASS.
+- lint / format check / typecheck: PASS.
+- Unit/API/Worker/Web config: 30 files, 167 tests PASS.
+- E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- GitHub Actions: pending push.
+- Additional fixes 5.3–5.4 are not started. External Provider/API/real telephone calls: 0.
+
 ## Temporary implementation / known issues
 
 - Stage 4B-2は接続コードとFake Transport検証まで完了しています。外部設定、書面承認、実Provider疎通、総合監査は未完了です。

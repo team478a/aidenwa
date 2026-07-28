@@ -304,3 +304,14 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Verified static checks, 159 Unit/API/Worker tests, 8 E2E tests and all production builds.
 - Committed as `408ec82`; GitHub Actions run `30348610326` passed.
 - Made zero real telephone or external Provider calls.
+
+## 2026-07-28 — Additional fix 5.2
+
+- Replaced the fixed Next.js backend rewrite host with the validated `API_INTERNAL_URL`.
+- Limited the localhost fallback to development and made missing test/production configuration
+  fail fast.
+- Rejected non-HTTP(S), credential-bearing, query-bearing and fragment-bearing internal URLs.
+- Added eight configuration tests and explicit example/CI environment values.
+- Verified static checks, 167 Unit/API/Worker/Web configuration tests, 8 E2E tests and all
+  production builds.
+- Made zero real telephone or external Provider calls.
