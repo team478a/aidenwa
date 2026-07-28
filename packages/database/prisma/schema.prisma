@@ -1119,20 +1119,22 @@ model TestCallAllowlist {
 }
 
 model ProviderWebhookEvent {
-  id               String    @id @default(uuid()) @db.Uuid
-  organizationId   String    @map("organization_id") @db.Uuid
-  provider         String
-  providerEventId  String    @map("provider_event_id")
-  eventType        String    @map("event_type")
-  eventTimestamp   DateTime  @map("event_timestamp")
-  callAttemptId    String?   @map("call_attempt_id") @db.Uuid
-  campaignId       String?   @map("campaign_id") @db.Uuid
-  sequenceNumber   Int?      @map("sequence_number")
-  normalizedData   Json      @default("{}") @map("normalized_data")
-  processingStatus String    @default("received") @map("processing_status")
-  failureCode      String?   @map("failure_code")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  processedAt      DateTime? @map("processed_at")
+  id                 String    @id @default(uuid()) @db.Uuid
+  organizationId     String    @map("organization_id") @db.Uuid
+  provider           String
+  providerEventId    String    @map("provider_event_id")
+  eventType          String    @map("event_type")
+  eventTimestamp     DateTime  @map("event_timestamp")
+  callAttemptId      String?   @map("call_attempt_id") @db.Uuid
+  campaignId         String?   @map("campaign_id") @db.Uuid
+  sequenceNumber     Int?      @map("sequence_number")
+  normalizedData     Json      @default("{}") @map("normalized_data")
+  processingStatus   String    @default("received") @map("processing_status")
+  processingAttempts Int       @default(0) @map("processing_attempts")
+  failureCode        String?   @map("failure_code")
+  lastAttemptAt      DateTime? @map("last_attempt_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  processedAt        DateTime? @map("processed_at")
 
   @@unique([provider, providerEventId])
   @@index([organizationId, createdAt])
@@ -1270,6 +1272,7 @@ model RealCallExecution {
   provider                  String        @default("twilio")
   providerCallId            String?       @unique @map("provider_call_id")
   providerCallIdFingerprint String?       @map("provider_call_id_fingerprint")
+  lastWebhookSequence       Int           @default(-1) @map("last_webhook_sequence")
   state                     RealCallState @default(reserved)
   dtmfResult                String?       @map("dtmf_result")
   estimatedCostMinor        Int           @map("estimated_cost_minor")
@@ -1324,6 +1327,7 @@ model ProductionIncident {
   entityId         String?   @map("entity_id")
   summary          String
   sanitizedDetails Json      @default("{}") @map("sanitized_details")
+  dedupeKey        String?   @unique @map("dedupe_key")
   assignedTo       String?   @map("assigned_to") @db.Uuid
   dueAt            DateTime? @map("due_at")
   resolvedBy       String?   @map("resolved_by") @db.Uuid

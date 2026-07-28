@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PrismaClient } from '@sales-ai/database';
+import { PrismaClient, processStoredProviderWebhook } from '@sales-ai/database';
 import { hashPassword } from '@sales-ai/shared/security';
 import { signFakeTwilioWebhook } from '@sales-ai/voice-provider';
 import { buildApp } from './app';
@@ -138,6 +138,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await prisma.outboxEvent.deleteMany({ where: { organizationId } });
   await prisma.providerWebhookEvent.deleteMany({ where: { organizationId } });
   await prisma.realCallExecution.deleteMany({ where: { organizationId } });
   await prisma.productionIncident.deleteMany({ where: { organizationId } });
@@ -279,12 +280,27 @@ describe('Stage 4B-1 signed Twilio endpoints', () => {
         where: { organizationId, category: 'webhook_signature_invalid', status: 'open' },
       }),
     ).toBe(1);
+    expect(await prisma.providerWebhookEvent.count({ where: { organizationId } })).toBe(0);
     const audit = await prisma.auditLog.findFirstOrThrow({
       where: { organizationId, action: 'twilio_webhook.signature_error' },
       orderBy: { occurredAt: 'desc' },
     });
     expect(JSON.stringify(audit)).not.toContain('+815000009999');
     expect(JSON.stringify(audit)).not.toContain('+815000000001');
+  });
+
+  it('rejects an invalid price without permanently saving the callback', async () => {
+    const before = await prisma.providerWebhookEvent.count({ where: { organizationId } });
+    const path = `/api/v1/twilio/status/${executionId}`;
+    const response = await form(path, {
+      CallSid: callSid,
+      CallStatus: 'completed',
+      SequenceNumber: '3',
+      Price: 'not-a-price',
+      PriceUnit: 'JPY',
+    });
+    expect(response.statusCode).toBe(403);
+    expect(await prisma.providerWebhookEvent.count({ where: { organizationId } })).toBe(before);
   });
 
   it('serves safe TwiML and retries no-input exactly once', async () => {
@@ -314,7 +330,7 @@ describe('Stage 4B-1 signed Twilio endpoints', () => {
       CallStatus: 'completed',
       SequenceNumber: '4',
       Price: '-1.25',
-      PriceUnit: 'jpy',
+      PriceUnit: 'JPY',
       From: '+815000009999',
       To: '+815000000001',
     };
@@ -329,6 +345,11 @@ describe('Stage 4B-1 signed Twilio endpoints', () => {
         })
       ).statusCode,
     ).toBe(204);
+    const received = await prisma.providerWebhookEvent.findMany({
+      where: { organizationId },
+      orderBy: { sequenceNumber: 'desc' },
+    });
+    for (const event of received) await processStoredProviderWebhook(prisma, event.id);
     const execution = await prisma.realCallExecution.findUniqueOrThrow({
       where: { id: executionId },
     });

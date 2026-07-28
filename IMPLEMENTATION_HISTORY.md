@@ -257,3 +257,20 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Added the appointment state-machine architecture document.
 - Kept the internal/Fake calendar path active and made zero external calendar or telephone calls.
 - Committed the Phase 5 implementation as `4a9714a`; GitHub Actions run `30089496742` passed.
+
+## 2026-07-28 — Maintainability remediation Phase 6
+
+- Changed Twilio callback intake to verify signatures before Zod validation and to reject invalid
+  price/currency values without persisting webhook events.
+- Added transactional ProviderWebhookEvent/Outbox receipt with a dedicated BullMQ job, three
+  attempts and exponential backoff.
+- Added an atomic webhook processor for Call SID association, monotonic sequence/state changes,
+  final cost, budget audit/suspension and event completion.
+- Added retry metadata, terminal failure handling and a unique sanitized production incident for
+  retry exhaustion.
+- Added migration `20260728010000_phase6_webhook_reliability`.
+- Added regression tests for invalid signatures and prices, duplicate/out-of-order delivery,
+  rollback then successful redelivery, and retry-exhaustion incident deduplication.
+- Verified Prisma format/validate/generate and migration deploy, static checks, 153
+  Unit/API/Worker tests, 8 E2E tests and all production builds.
+- Kept all external integrations disabled and made zero real telephone or external Provider calls.

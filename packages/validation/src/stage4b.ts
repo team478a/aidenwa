@@ -49,7 +49,13 @@ export const twilioWebhookParamsSchema = z
     SequenceNumber: z.coerce.number().int().nonnegative().optional(),
     Digits: z.string().max(1).optional(),
     CallDuration: z.coerce.number().int().nonnegative().optional(),
-    Price: z.string().optional(),
-    PriceUnit: z.string().length(3).optional(),
+    Price: z
+      .string()
+      .regex(/^-?\d+(\.\d{1,6})?$/u)
+      .optional(),
+    PriceUnit: z
+      .string()
+      .regex(/^[A-Z]{3}$/u)
+      .optional(),
   })
   .passthrough();

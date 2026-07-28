@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@sales-ai/database';
+import { processStoredProviderWebhook, type PrismaClient } from '@sales-ai/database';
 
 export async function processProviderWebhook(prisma: PrismaClient, eventId: string) {
   const event = await prisma.providerWebhookEvent.findUnique({ where: { id: eventId } });
@@ -10,8 +10,5 @@ export async function processProviderWebhook(prisma: PrismaClient, eventId: stri
     });
     throw new Error('simulated_webhook_processing_failure');
   }
-  await prisma.providerWebhookEvent.update({
-    where: { id: event.id },
-    data: { processingStatus: 'processed', failureCode: null, processedAt: new Date() },
-  });
+  await processStoredProviderWebhook(prisma, eventId);
 }

@@ -6,6 +6,7 @@ export const outboxEventTypes = [
   'mock-call',
   'twilio-call',
   'twilio-emergency-stop',
+  'provider-webhook',
 ] as const;
 export type OutboxEventType = (typeof outboxEventTypes)[number];
 export const outboxEventTypeSchema = z.enum(outboxEventTypes);
@@ -30,16 +31,19 @@ const twilioEmergencyStopPayloadSchema = z
   .refine((value) => value.authorizationId || value.emergencyStopId, {
     message: 'authorizationId or emergencyStopId is required',
   });
+const providerWebhookPayloadSchema = z.object({ eventId: z.string().uuid() });
 
 export type CompanyImportOutboxPayload = z.infer<typeof companyImportPayloadSchema>;
 export type MockCallOutboxPayload = z.infer<typeof mockCallPayloadSchema>;
 export type TwilioCallOutboxPayload = z.infer<typeof twilioCallPayloadSchema>;
 export type TwilioEmergencyStopOutboxPayload = z.infer<typeof twilioEmergencyStopPayloadSchema>;
+export type ProviderWebhookOutboxPayload = z.infer<typeof providerWebhookPayloadSchema>;
 export type OutboxPayload =
   | CompanyImportOutboxPayload
   | MockCallOutboxPayload
   | TwilioCallOutboxPayload
-  | TwilioEmergencyStopOutboxPayload;
+  | TwilioEmergencyStopOutboxPayload
+  | ProviderWebhookOutboxPayload;
 
 export function parseOutboxPayload(eventType: OutboxEventType, payload: unknown): OutboxPayload {
   switch (eventType) {
@@ -52,5 +56,7 @@ export function parseOutboxPayload(eventType: OutboxEventType, payload: unknown)
       return twilioCallPayloadSchema.parse(payload);
     case 'twilio-emergency-stop':
       return twilioEmergencyStopPayloadSchema.parse(payload);
+    case 'provider-webhook':
+      return providerWebhookPayloadSchema.parse(payload);
   }
 }

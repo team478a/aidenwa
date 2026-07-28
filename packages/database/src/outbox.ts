@@ -5,7 +5,8 @@ export type OutboxEventType =
   | 'company-import'
   | 'mock-call'
   | 'twilio-call'
-  | 'twilio-emergency-stop';
+  | 'twilio-emergency-stop'
+  | 'provider-webhook';
 
 type OutboxClient = Prisma.TransactionClient | PrismaClient;
 

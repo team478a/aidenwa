@@ -319,8 +319,37 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - lint/format/typecheck, all 8 E2E (including invalid transition HTTP 409) and Web/API/Worker
   production build: PASS.
 - GitHub Actions: run `30089496742` PASS for Phase 5 commit `4a9714a`.
-- Phase 6 and later: not started.
+- Phase 6: complete locally; GitHub Actions pending.
+- Phase 7 and later: not started.
 - External Provider/API/real telephone calls: 0.
+
+## Maintainability remediation Phase 6
+
+- Status: complete locally.
+- Twilio webhook handling now verifies the signature before Zod validation and never creates a
+  ProviderWebhookEvent for invalid signatures or invalid callback values.
+- Valid callbacks are stored as `received` together with a transactional `provider-webhook`
+  Outbox event; BullMQ delivers them with three attempts and exponential backoff.
+- Call SID association, monotonic sequence handling, call state/cost updates, budget audit logs,
+  budget suspension and the final `processed` transition commit in one database transaction.
+- A processing failure rolls back all call/cost/audit changes, records a sanitized failure code and
+  leaves the event `retrying`; exhaustion changes it to `failed` and opens one deduplicated,
+  sanitized incident.
+- Migration `20260728010000_phase6_webhook_reliability` adds processing attempt metadata,
+  `last_webhook_sequence` and incident deduplication.
+- Acceptance tests:
+  - `rejects an invalid signature and stores only a sanitized audit record`: PASS.
+  - `rejects an invalid price without permanently saving the callback`: PASS.
+  - `deduplicates callbacks and never rewinds a terminal state`: PASS.
+  - `rolls back a failed call update and succeeds on BullMQ redelivery`: PASS.
+  - `opens only one sanitized incident when retry attempts are exhausted`: PASS.
+- Prisma format/validate/generate and migration deploy: PASS.
+- lint / format check / typecheck: PASS.
+- Unit/API/Worker: 27 files, 153 tests PASS.
+- E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- GitHub Actions: pending push.
+- Phase 7 and later were not changed. External Provider/API/real telephone calls: 0.
 
 ## Temporary implementation / known issues
 

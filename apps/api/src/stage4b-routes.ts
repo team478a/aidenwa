@@ -654,12 +654,6 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
           ([, v]) => typeof v === 'string',
         ),
       ) as Record<string, string>;
-      const parsed = twilioWebhookParamsSchema.safeParse(params);
-      if (
-        !parsed.success ||
-        (execution.providerCallId && parsed.data.CallSid !== execution.providerCallId)
-      )
-        return deps.error(reply, 403, 'INVALID_PROVIDER_EVENT', '通話相関が不正です');
       const provider = providerFromEnv(env);
       const signature = request.headers['x-twilio-signature'];
       const base =
@@ -683,7 +677,13 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
         });
         return deps.error(reply, 403, 'INVALID_SIGNATURE', 'Twilio署名が不正です');
       }
-      if (!execution.providerCallId) {
+      const parsed = twilioWebhookParamsSchema.safeParse(params);
+      if (
+        !parsed.success ||
+        (execution.providerCallId && parsed.data.CallSid !== execution.providerCallId)
+      )
+        return deps.error(reply, 403, 'INVALID_PROVIDER_EVENT', '通話相関が不正です');
+      if (!execution.providerCallId && kind !== 'status') {
         if (!['reserved', 'provider_unknown'].includes(execution.state))
           return deps.error(reply, 403, 'INVALID_PROVIDER_EVENT', 'Call SIDを関連付けできません');
         await prisma.realCallExecution.update({
@@ -751,91 +751,42 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
         .digest('hex')
         .slice(0, 24);
       const eventKey = `${parsed.data.CallSid}:${parsed.data.CallStatus ?? 'unknown'}:${parsed.data.SequenceNumber ?? 0}:${fingerprint}`;
+      const finalCost = parsed.data.Price
+        ? Math.ceil(Math.abs(Number(parsed.data.Price)) * 100)
+        : undefined;
       try {
-        await prisma.providerWebhookEvent.create({
-          data: {
-            organizationId: execution.organizationId,
-            provider: 'twilio',
-            providerEventId: eventKey,
-            eventType: `twilio.${parsed.data.CallStatus ?? 'unknown'}`,
-            eventTimestamp: new Date(),
-            sequenceNumber: parsed.data.SequenceNumber ?? null,
-            normalizedData: {
-              state,
-              callFingerprint: `${parsed.data.CallSid.slice(0, 4)}…${parsed.data.CallSid.slice(-4)}`,
+        await prisma.$transaction(async (tx) => {
+          const event = await tx.providerWebhookEvent.create({
+            data: {
+              organizationId: execution.organizationId,
+              provider: 'twilio',
+              providerEventId: eventKey,
+              eventType: `twilio.${parsed.data.CallStatus ?? 'unknown'}`,
+              eventTimestamp: new Date(),
+              sequenceNumber: parsed.data.SequenceNumber ?? null,
+              normalizedData: {
+                executionId: execution.id,
+                callSid: parsed.data.CallSid,
+                state,
+                callFingerprint: `${parsed.data.CallSid.slice(0, 4)}…${parsed.data.CallSid.slice(-4)}`,
+                ...(finalCost !== undefined ? { priceMinor: finalCost } : {}),
+                ...(parsed.data.PriceUnit ? { currency: parsed.data.PriceUnit } : {}),
+              },
+              processingStatus: 'received',
             },
-            processingStatus: 'processed',
-            processedAt: new Date(),
-          },
+          });
+          await enqueueOutbox(tx, {
+            organizationId: execution.organizationId,
+            eventType: 'provider-webhook',
+            aggregateType: 'provider_webhook_event',
+            aggregateId: event.id,
+            payload: { eventId: event.id },
+          });
         });
       } catch (cause) {
         if (cause instanceof Prisma.PrismaClientKnownRequestError && cause.code === 'P2002')
           return reply.code(204).send();
         throw cause;
-      }
-      if (shouldAdvance(execution.state, state)) {
-        const finalCost = parsed.data.Price
-          ? Math.ceil(Math.abs(Number(parsed.data.Price)) * 100)
-          : undefined;
-        await prisma.realCallExecution.update({
-          where: { id: execution.id },
-          data: {
-            state,
-            ...(state === 'in_progress' ? { answeredAt: new Date() } : {}),
-            ...(['completed', 'busy', 'no_answer', 'failed', 'canceled'].includes(state)
-              ? {
-                  endedAt: new Date(),
-                  ...(finalCost !== undefined
-                    ? {
-                        finalCostMinor: finalCost,
-                        reservedCostMinor: finalCost,
-                        ...(parsed.data.PriceUnit
-                          ? { currency: parsed.data.PriceUnit.toUpperCase() }
-                          : {}),
-                      }
-                    : {}),
-                }
-              : {}),
-          },
-        });
-        if (finalCost !== undefined) {
-          const authorization = await prisma.productionTestAuthorization.findUnique({
-            where: { id: execution.authorizationId },
-          });
-          if (authorization) {
-            const total = await prisma.realCallExecution.aggregate({
-              where: { authorizationId: authorization.id },
-              _sum: { reservedCostMinor: true },
-            });
-            const beforeTotal =
-              (total._sum.reservedCostMinor ?? 0) - finalCost + execution.reservedCostMinor;
-            const afterTotal = total._sum.reservedCostMinor ?? 0;
-            const thresholds = crossedBudgetThresholds(
-              beforeTotal,
-              afterTotal,
-              authorization.budgetLimitMinor,
-            );
-            for (const threshold of thresholds)
-              await writeAudit(prisma, {
-                organizationId: execution.organizationId,
-                action: `twilio_budget.${threshold}`,
-                entityType: 'production_test_authorization',
-                entityId: authorization.id,
-                afterData: { threshold, amountMinor: afterTotal, currency: authorization.currency },
-              });
-            if (thresholds.includes('100_percent'))
-              await prisma.$transaction([
-                prisma.productionTestAuthorization.update({
-                  where: { id: authorization.id },
-                  data: { status: 'suspended', decisionReason: 'budget_100_percent' },
-                }),
-                prisma.providerConfiguration.updateMany({
-                  where: { organizationId: execution.organizationId, provider: 'twilio' },
-                  data: { productionEnabled: false },
-                }),
-              ]);
-          }
-        }
       }
       return reply.code(204).send();
     };
@@ -916,20 +867,6 @@ function mapTwilioState(v?: string) {
       >
     )[v ?? ''] ?? 'provider_unknown'
   );
-}
-function shouldAdvance(current: string, next: string) {
-  const terminal = ['completed', 'busy', 'no_answer', 'failed', 'canceled'];
-  if (terminal.includes(current)) return false;
-  if (terminal.includes(next)) return true;
-  const rank: Record<string, number> = {
-    reserved: 0,
-    provider_unknown: 0,
-    queued: 1,
-    initiated: 2,
-    ringing: 3,
-    in_progress: 4,
-  };
-  return (rank[next] ?? 0) >= (rank[current] ?? 0);
 }
 export function crossedBudgetThresholds(before: number, after: number, limit: number) {
   if (limit <= 0) return ['100_percent'] as const;
