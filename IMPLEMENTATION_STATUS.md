@@ -413,6 +413,26 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - GitHub Actions: run `30350328162` PASS for implementation commit `d57079c`.
 - Additional fixes 5.3–5.4 are not started. External Provider/API/real telephone calls: 0.
 
+## Additional fix 5.3 — Manager authorization scope
+
+- Status: implementation and local verification complete.
+- Accepted organization-wide manager scope in ADR
+  `docs/decisions/0006-manager-organization-scope.md`, consistent with the Stage 2 and Stage 3
+  specifications.
+- Team membership and `Team.managerUserId` are assignment/responsibility metadata, not an
+  authorization boundary. Authenticated organization scope remains mandatory for all data.
+- Managers may list organization users and change only `sales` Team assignments; they cannot
+  administer Teams, change non-sales users, manage user lifecycle, update organization settings,
+  or reference another organization's Team.
+- Focused authorization test
+  `gives managers organization-wide sales assignment without Team administration rights`: PASS.
+- lint / format check / typecheck: PASS.
+- Unit/API/Worker/Web config: 30 files, 167 tests PASS.
+- E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- GitHub Actions: pending push.
+- Additional fix 5.4 is not started. External Provider/API/real telephone calls: 0.
+
 ## Temporary implementation / known issues
 
 - Stage 4B-2は接続コードとFake Transport検証まで完了しています。外部設定、書面承認、実Provider疎通、総合監査は未完了です。

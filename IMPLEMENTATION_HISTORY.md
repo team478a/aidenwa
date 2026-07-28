@@ -316,3 +316,14 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   production builds.
 - Committed as `d57079c`; GitHub Actions run `30350328162` passed.
 - Made zero real telephone or external Provider calls.
+
+## 2026-07-28 — Additional fix 5.3
+
+- Resolved the manager-scope ambiguity in favor of organization-wide operational access, matching
+  the existing Stage 2 and Stage 3 specifications.
+- Added ADR `0006-manager-organization-scope.md` and documented the Stage 1 API limits.
+- Expanded authorization coverage to prove cross-Team sales visibility/assignment while denying
+  Team administration, non-sales updates and cross-organization Team references.
+- Verified static checks, 167 Unit/API/Worker/Web configuration tests, 8 E2E tests and all
+  production builds.
+- Made zero real telephone or external Provider calls.

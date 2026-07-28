@@ -18,7 +18,8 @@ let salesId = '';
 let suspendedId = '';
 let otherUserId = '';
 let teamId = '';
-let otherTeamId = '';
+let secondTeamId = '';
+let crossOrganizationTeamId = '';
 const app = buildApp({ NODE_ENV: 'test', DEFAULT_ORGANIZATION_SLUG: `test-${suffix}` }, { prisma });
 
 type Auth = { cookie: string; csrf: string };
@@ -67,12 +68,14 @@ beforeAll(async () => {
     data: { name: 'Other Org', slug: `other-${suffix}` },
   });
   otherOrganizationId = other.id;
-  const [team, otherTeam] = await Promise.all([
+  const [team, secondTeam, crossOrganizationTeam] = await Promise.all([
     prisma.team.create({ data: { organizationId, name: `Team ${suffix}` } }),
+    prisma.team.create({ data: { organizationId, name: `Second Team ${suffix}` } }),
     prisma.team.create({ data: { organizationId: other.id, name: `Other Team ${suffix}` } }),
   ]);
   teamId = team.id;
-  otherTeamId = otherTeam.id;
+  secondTeamId = secondTeam.id;
+  crossOrganizationTeamId = crossOrganizationTeam.id;
   const [admin, manager, sales, suspended, otherUser] = await Promise.all([
     prisma.user.create({
       data: {
@@ -92,6 +95,7 @@ beforeAll(async () => {
         passwordHash,
         role: UserRole.manager,
         status: UserStatus.active,
+        teamId,
       },
     }),
     prisma.user.create({
@@ -102,6 +106,7 @@ beforeAll(async () => {
         passwordHash,
         role: UserRole.sales,
         status: UserStatus.active,
+        teamId: secondTeamId,
       },
     }),
     prisma.user.create({
@@ -130,6 +135,7 @@ beforeAll(async () => {
   salesId = sales.id;
   suspendedId = suspended.id;
   otherUserId = otherUser.id;
+  await prisma.team.update({ where: { id: teamId }, data: { managerUserId: managerId } });
 });
 
 afterAll(async () => {
@@ -198,8 +204,25 @@ describe('Stage 1 authentication and authorization', () => {
       (await mutation(manager, 'PATCH', '/api/v1/organization', { name: 'No' })).statusCode,
     ).toBe(403);
   });
-  it('prevents managers from administering teams or assigning a cross-organization team', async () => {
+  it('gives managers organization-wide sales assignment without Team administration rights', async () => {
     const manager = (await login(`manager-${suffix}@example.test`)).auth;
+    const usersResponse = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users',
+      headers: { cookie: manager.cookie },
+    });
+    expect(usersResponse.statusCode).toBe(200);
+    expect(
+      usersResponse.json<{ users: { id: string }[] }>().users.some((user) => user.id === salesId),
+    ).toBe(true);
+    expect(
+      (
+        await mutation(manager, 'PATCH', `/api/v1/users/${salesId}`, {
+          teamId,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: salesId } })).teamId).toBe(teamId);
     expect(
       (await mutation(manager, 'POST', '/api/v1/teams', { name: 'Unauthorized Team' })).statusCode,
     ).toBe(403);
@@ -210,10 +233,17 @@ describe('Stage 1 authentication and authorization', () => {
     expect(
       (
         await mutation(manager, 'PATCH', `/api/v1/users/${salesId}`, {
-          teamId: otherTeamId,
+          teamId: crossOrganizationTeamId,
         })
       ).statusCode,
     ).toBe(400);
+    expect(
+      (
+        await mutation(manager, 'PATCH', `/api/v1/users/${managerId}`, {
+          teamId: secondTeamId,
+        })
+      ).statusCode,
+    ).toBe(403);
   });
   it('allows admin to create, suspend, and activate a user and invalidates sessions', async () => {
     const admin = (await login(`admin-${suffix}@example.test`)).auth;
