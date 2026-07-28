@@ -393,7 +393,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Unit/API/Worker: 29 files, 159 tests PASS.
 - E2E: 8/8 PASS.
 - Web/API/Worker production build: PASS.
-- GitHub Actions: pending push.
+- GitHub Actions: run `30348610326` PASS for commit `408ec82`.
 - Additional fixes 5.2–5.4 are not started. External Provider/API/real telephone calls: 0.
 
 ## Temporary implementation / known issues
