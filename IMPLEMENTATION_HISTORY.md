@@ -328,3 +328,16 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   production builds.
 - Committed as `feab23e`; GitHub Actions run `30352605396` passed.
 - Made zero real telephone or external Provider calls.
+
+## 2026-07-28 — Additional fix 5.4
+
+- Expanded scenario validation for duplicate nodes/edges/defaults/priorities, invalid references,
+  unreachable nodes, outgoing end edges, required node configuration and maximum depth.
+- Required every reachable path region to retain an end route and rejected unbounded cycles.
+- Added bounded-cycle configuration and enforced its maximum visit count during deterministic
+  simulation.
+- Added focused coverage for every requested structural category and the bounded-cycle runtime
+  behavior.
+- Verified static checks, 171 Unit/API/Worker/Web configuration tests, 8 E2E tests and all
+  production builds.
+- Made zero real telephone or external Provider calls.

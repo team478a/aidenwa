@@ -433,6 +433,23 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - GitHub Actions: run `30352605396` PASS for implementation commit `feab23e`.
 - Additional fix 5.4 is not started. External Provider/API/real telephone calls: 0.
 
+## Additional fix 5.4 — Scenario structural validation
+
+- Status: implementation and local verification complete.
+- Scenario validation now reports duplicate node keys, edges, default branches and per-node
+  priorities; missing references; unreachable nodes; outgoing `end` edges; and node-type-specific
+  configuration omissions.
+- Every reachable node must retain a route to `end`; depth is limited to 50.
+- Cycles require an integer `config.maxCycles` from 1 through 10 and must retain an exit path.
+  Simulation enforces the configured visit limit and uses the next eligible exit branch.
+- Focused scenario validation/API tests: 7 PASS.
+- lint / format check / typecheck: PASS.
+- Unit/API/Worker/Web config: 30 files, 171 tests PASS.
+- E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- GitHub Actions: pending push.
+- Additional fixes 5.1–5.4 are complete. External Provider/API/real telephone calls: 0.
+
 ## Temporary implementation / known issues
 
 - Stage 4B-2は接続コードとFake Transport検証まで完了しています。外部設定、書面承認、実Provider疎通、総合監査は未完了です。

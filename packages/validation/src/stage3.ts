@@ -59,6 +59,11 @@ export const graphSchema = z.object({
         title: short,
         instruction: z.string().max(5000).default(''),
         messageTemplate: z.string().max(5000).default(''),
+        expectedIntents: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
+        extractionSchema: z.record(z.unknown()).default({}),
+        timeoutSeconds: z.number().int().min(1).max(300).default(15),
+        retryLimit: z.number().int().min(0).max(10).default(1),
+        config: z.record(z.unknown()).default({}),
       }),
     )
     .min(1)

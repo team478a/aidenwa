@@ -277,6 +277,8 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
         organizationId: auth.organizationId,
         scenarioVersionId: id,
         ...node,
+        extractionSchema: node.extractionSchema as Prisma.InputJsonObject,
+        config: node.config as Prisma.InputJsonObject,
       })),
     });
     await prisma.scenarioEdge.createMany({
