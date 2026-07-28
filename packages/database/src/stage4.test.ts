@@ -4,7 +4,9 @@ import { inCallableWindow, truncateUtc } from './stage4';
 describe('Stage 4A production gate time controls', () => {
   it('supports overnight callable windows', () => {
     const late = new Date('2026-07-20T14:30:00.000Z'); // 23:30 JST Monday
+    const continuation = new Date('2026-07-20T16:00:00.000Z'); // 01:00 JST Tuesday
     expect(inCallableWindow(late, [1], '22:00', '02:00', 'Asia/Tokyo')).toBe(true);
+    expect(inCallableWindow(continuation, [1], '22:00', '02:00', 'Asia/Tokyo')).toBe(true);
     expect(inCallableWindow(late, [1], '09:00', '18:00', 'Asia/Tokyo')).toBe(false);
   });
   it('creates deterministic UTC counter periods', () => {

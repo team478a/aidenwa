@@ -380,6 +380,22 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - GitHub Actions: run `30347090048` PASS for Phase 7 commit `79ec2be`.
 - Phase 8 and later were not changed. External Provider/API/real telephone calls: 0.
 
+## Maintainability remediation Phase 8 / additional fix 5.1
+
+- Status: first incremental module split complete; Phase 8 remains incremental by instruction.
+- Extracted callable-time business policy into the pure shared `callable-window` module.
+- Production Gate, Mock call execution and human follow-up now use the same implementation.
+- Overnight windows belong to their starting weekday: Monday 22:00–02:00 correctly includes
+  Tuesday 01:00 for Monday, not Tuesday.
+- Invalid time strings, invalid dates and invalid timezones fail closed.
+- Focused callable-window/Production Gate/Mock tests: 11 PASS.
+- lint / format check / typecheck: PASS.
+- Unit/API/Worker: 29 files, 159 tests PASS.
+- E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- GitHub Actions: pending push.
+- Additional fixes 5.2–5.4 are not started. External Provider/API/real telephone calls: 0.
+
 ## Temporary implementation / known issues
 
 - Stage 4B-2は接続コードとFake Transport検証まで完了しています。外部設定、書面承認、実Provider疎通、総合監査は未完了です。

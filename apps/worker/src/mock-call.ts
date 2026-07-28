@@ -1,4 +1,5 @@
 import { truncateUtc, type Prisma, type PrismaClient } from '@sales-ai/database';
+import { inCallableWindow } from '@sales-ai/shared';
 import { MockVoiceProvider, maskPhone, type MockFixture } from '@sales-ai/voice-provider';
 import { mockCallStopTransition, type MockCallStopReason } from './mock-call-state.js';
 
@@ -382,27 +383,17 @@ async function executionLimitReason(
   }>,
 ): Promise<MockCallStopReason | null> {
   const now = new Date();
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: job.campaign.timezone,
-      weekday: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    })
-      .formatToParts(now)
-      .map((part) => [part.type, part.value]),
-  );
-  const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday ?? '');
-  const minute = Number(parts.hour) * 60 + Number(parts.minute);
-  const [startHour = 0, startMinute = 0] = job.campaign.callableStartTime.split(':').map(Number);
-  const [endHour = 0, endMinute = 0] = job.campaign.callableEndTime.split(':').map(Number);
-  const start = startHour * 60 + startMinute;
-  const end = endHour * 60 + endMinute;
-  const inWindow =
-    start <= end ? minute >= start && minute <= end : minute >= start || minute <= end;
   const weekdays = job.campaign.callableWeekdays as number[];
-  if (!weekdays.includes(weekday) || !inWindow) return 'outside_callable_window';
+  if (
+    !inCallableWindow(
+      now,
+      weekdays,
+      job.campaign.callableStartTime,
+      job.campaign.callableEndTime,
+      job.campaign.timezone,
+    )
+  )
+    return 'outside_callable_window';
   if (job.target.attemptCount >= job.campaign.maxAttemptsPerTarget) return 'attempt_limit';
   if (job.target.nextAttemptAt && job.target.nextAttemptAt > now) return 'retry_not_due';
   const startOfDay = new Date(now);

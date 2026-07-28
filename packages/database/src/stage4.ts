@@ -1,4 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
+import { inCallableWindow } from '@sales-ai/shared';
+
+export { inCallableWindow } from '@sales-ai/shared';
 
 export type ProductionGateInput = {
   organizationId: string;
@@ -200,39 +203,6 @@ export async function evaluateProductionGate(
     reasonCodes: [...new Set(reasons)],
     ...(approval ? { approvalId: approval.id } : {}),
   };
-}
-
-export function inCallableWindow(
-  now: Date,
-  weekdays: number[],
-  startText: string,
-  endText: string,
-  timezone: string,
-): boolean {
-  if (!startText || !endText) return false;
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      weekday: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    })
-      .formatToParts(now)
-      .map((p) => [p.type, p.value]),
-  );
-  const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday ?? '');
-  const minute = Number(parts.hour) * 60 + Number(parts.minute);
-  const toMinute = (value: string) => {
-    const [h = 0, m = 0] = value.split(':').map(Number);
-    return h * 60 + m;
-  };
-  const start = toMinute(startText);
-  const end = toMinute(endText);
-  return (
-    weekdays.includes(weekday) &&
-    (start <= end ? minute >= start && minute <= end : minute >= start || minute <= end)
-  );
 }
 
 export function truncateUtc(value: Date, period: 'hour' | 'day' | 'month'): Date {

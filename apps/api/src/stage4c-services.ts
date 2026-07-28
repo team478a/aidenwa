@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
-import { inCallableWindow, type PrismaClient } from '@sales-ai/database';
+import type { PrismaClient } from '@sales-ai/database';
+import { inCallableWindow } from '@sales-ai/shared';
 import type { ApiEnv } from '@sales-ai/validation';
 import { FakeZoomPhoneProvider, type FakeZoomFixture } from '@sales-ai/human-calling-provider';
 
