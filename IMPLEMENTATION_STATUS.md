@@ -319,8 +319,9 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - lint/format/typecheck, all 8 E2E (including invalid transition HTTP 409) and Web/API/Worker
   production build: PASS.
 - GitHub Actions: run `30089496742` PASS for Phase 5 commit `4a9714a`.
-- Phase 6: complete locally; GitHub Actions pending.
-- Phase 7 and later: not started.
+- Phase 6: complete; GitHub Actions PASS.
+- Phase 7: complete locally; GitHub Actions pending.
+- Phase 8 and later: not started.
 - External Provider/API/real telephone calls: 0.
 
 ## Maintainability remediation Phase 6
@@ -349,7 +350,35 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - E2E: 8/8 PASS.
 - Web/API/Worker production build: PASS.
 - GitHub Actions: run `30343446120` PASS for Phase 6 commit `7df092e`.
-- Phase 7 and later were not changed. External Provider/API/real telephone calls: 0.
+- Phase 6 completion did not include later phases. External Provider/API/real telephone calls: 0.
+
+## Maintainability remediation Phase 7
+
+- Status: complete locally.
+- Removed all Worker maintenance `setInterval` execution and registered 12 stable BullMQ Job
+  Schedulers for health, import cleanup, stuck reservation recovery, call-event cleanup, realtime
+  cleanup, snoozed follow-up reopening, handoff cleanup, appointment maintenance, Twilio
+  authorization expiry, Twilio cost reconciliation, Outbox publishing and usage-counter rebuild.
+- Every scheduler has three attempts, exponential backoff, an explicit execution timeout, retained
+  completed/failed history and stable scheduler identity.
+- Redis locks prevent concurrent execution of the same task; repeated Worker startup safely
+  upserts rather than duplicates schedulers.
+- Exhausted jobs write sanitized structured operational errors and one deduplicated production
+  incident when PostgreSQL is available. Incident-write failure is also safely logged without an
+  unhandled rejection.
+- `SIGINT`/`SIGTERM` now use guarded graceful shutdown: active Worker, Queue, health key, Prisma and
+  Redis close in order, with a nonzero exit code on failure.
+- Focused tests:
+  - `upserts every required task with retry, backoff and retained history`: PASS.
+  - `creates stable Job Schedulers in Redis and can recreate them after reconnect`: PASS.
+  - `retains retry failures and creates one sanitized incident only at exhaustion`: PASS.
+- lint / format check / typecheck: PASS.
+- Unit/API/Worker: 28 files, 156 tests PASS.
+- E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- Operations guide: `docs/runbooks/worker-maintenance.md`.
+- GitHub Actions: pending push.
+- Phase 8 and later were not changed. External Provider/API/real telephone calls: 0.
 
 ## Temporary implementation / known issues
 

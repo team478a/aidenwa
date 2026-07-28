@@ -275,3 +275,19 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   Unit/API/Worker tests, 8 E2E tests and all production builds.
 - Committed the Phase 6 implementation as `7df092e`; GitHub Actions run `30343446120` passed.
 - Kept all external integrations disabled and made zero real telephone or external Provider calls.
+
+## 2026-07-28 — Maintainability remediation Phase 7
+
+- Replaced Worker health, Outbox and hourly cleanup `setInterval` callbacks with 12 stable BullMQ
+  Job Schedulers.
+- Added per-task attempts, exponential backoff, execution timeouts, retained completion/failure
+  history and Redis execution locks.
+- Added scheduled usage-counter rebuilding from the immutable UsageLedger.
+- Added sanitized retry/exhaustion logging and deduplicated production incidents, including a safe
+  operational alert fallback when PostgreSQL cannot store an incident.
+- Made signal shutdown guarded and ordered across Worker, Queue, health state, Prisma and Redis.
+- Added tests for complete scheduler policy coverage, idempotent registration after Redis
+  reconnect, retained retry failures and one incident at exhaustion.
+- Added the Worker maintenance recovery and failure-inspection runbook.
+- Verified static checks, 156 Unit/API/Worker tests, 8 E2E tests and all production builds.
+- Kept all external integrations disabled and made zero real telephone or external Provider calls.

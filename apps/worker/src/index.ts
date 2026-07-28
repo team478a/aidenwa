@@ -2,21 +2,16 @@ import { Queue, Worker, type Job } from 'bullmq';
 import Redis from 'ioredis';
 import { PrismaClient } from '@sales-ai/database';
 import { workerEnvSchema } from '@sales-ai/validation/env';
-import { cleanupExpiredImports } from './import-cleanup.js';
-import { processMockCall, recoverStuckReservations } from './mock-call.js';
+import { processMockCall } from './mock-call.js';
 import { processProviderWebhook } from './provider-webhook.js';
-import { cleanupRealtimeData } from './realtime-cleanup.js';
-import { reopenSnoozedFollowups } from './followup.js';
-import { cleanupExpiredHandoffs } from './handoff-cleanup.js';
-import { maintainAppointments } from './appointment.js';
-import { publishOutboxBatch, repairOutboxGaps } from './outbox.js';
 import { mapCompanyImport, processCompanyImport } from './company-import.js';
+import { processTwilioCall, stopTwilioExecutions } from './twilio-call.js';
 import {
-  expireTwilioAuthorizations,
-  processTwilioCall,
-  reconcileTwilioCosts,
-  stopTwilioExecutions,
-} from './twilio-call.js';
+  maintenanceJobNames,
+  processMaintenanceJob,
+  recordMaintenanceFailure,
+  registerMaintenanceSchedulers,
+} from './maintenance.js';
 
 const env = workerEnvSchema.parse(process.env);
 const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
@@ -28,6 +23,10 @@ const prisma = new PrismaClient({
 });
 
 async function processor(job: Job) {
+  if (maintenanceJobNames.includes(job.name as (typeof maintenanceJobNames)[number])) {
+    await processMaintenanceJob(job, prisma, connection, queue, env);
+    return;
+  }
   if (job.name === 'twilio-emergency-stop') {
     const data = job.data as {
       organizationId?: string | null;
@@ -67,68 +66,59 @@ const worker = new Worker('sales-ai-jobs', processor, {
   connection,
   concurrency: env.MOCK_WORKER_CONCURRENCY,
 });
-let outboxPublishing = false;
-async function runOutboxPublisher() {
-  if (outboxPublishing) return;
-  outboxPublishing = true;
-  try {
-    await publishOutboxBatch(prisma, queue);
-  } catch (cause) {
-    console.error('outbox_publish_failed', cause instanceof Error ? cause.name : 'UnknownError');
-  } finally {
-    outboxPublishing = false;
-  }
-}
-async function writeHealth() {
-  await connection.set(
-    env.WORKER_HEALTH_KEY,
-    JSON.stringify({ service: 'worker', status: 'ok', timestamp: new Date().toISOString() }),
-    'EX',
-    15,
+worker.on('failed', (job, cause) => {
+  void recordMaintenanceFailure(prisma, job, cause);
+});
+worker.on('error', (cause) => {
+  console.error(
+    JSON.stringify({
+      event: 'worker_error',
+      failureCode: cause.name,
+    }),
   );
-}
-await writeHealth();
-await repairOutboxGaps(prisma);
-await runOutboxPublisher();
-const healthTimer = setInterval(() => void writeHealth(), 5_000);
-const outboxTimer = setInterval(() => void runOutboxPublisher(), 5_000);
-const cleanupTimer = setInterval(
-  () =>
-    void Promise.all([
-      cleanupExpiredImports(prisma),
-      recoverStuckReservations(
-        prisma,
-        new Date(Date.now() - env.STUCK_RESERVATION_MINUTES * 60_000),
-      ),
-      prisma.callEvent.deleteMany({
-        where: {
-          eventAt: { lt: new Date(Date.now() - env.CALL_EVENT_RETENTION_DAYS * 86_400_000) },
-        },
-      }),
-      cleanupRealtimeData(prisma, {
-        staleBefore: new Date(Date.now() - env.REALTIME_STALE_SESSION_MINUTES * 60_000),
-        eventBefore: new Date(Date.now() - env.CALL_EVENT_RETENTION_DAYS * 86_400_000),
-      }),
-      reopenSnoozedFollowups(prisma),
-      cleanupExpiredHandoffs(prisma),
-      maintainAppointments(prisma),
-      expireTwilioAuthorizations(prisma),
-      repairOutboxGaps(prisma),
-      ...(env.VOICE_PROVIDER === 'twilio' && env.PRODUCTION_CALLS_ENABLED
-        ? [reconcileTwilioCosts(prisma, env)]
-        : []),
-    ]),
-  60 * 60 * 1000,
-);
+});
+queue.on('error', (cause) => {
+  console.error(
+    JSON.stringify({
+      event: 'queue_error',
+      failureCode: cause.name,
+    }),
+  );
+});
+await registerMaintenanceSchedulers(queue);
+
+let shuttingDown = false;
 async function shutdown() {
-  clearInterval(healthTimer);
-  clearInterval(outboxTimer);
-  clearInterval(cleanupTimer);
-  await connection.del(env.WORKER_HEALTH_KEY);
-  await worker.close();
-  await queue.close();
-  await prisma.$disconnect();
-  connection.disconnect();
+  if (shuttingDown) return;
+  shuttingDown = true;
+  let failure: unknown;
+  const close = async (action: () => Promise<unknown>) => {
+    try {
+      await action();
+    } catch (cause) {
+      failure ??= cause;
+    }
+  };
+  try {
+    await close(() => worker.close());
+    await close(() => connection.del(env.WORKER_HEALTH_KEY));
+    await close(() => queue.close());
+    await close(() => prisma.$disconnect());
+  } finally {
+    connection.disconnect();
+  }
+  if (failure) throw failure instanceof Error ? failure : new Error('worker_shutdown_failed');
 }
-process.once('SIGINT', () => void shutdown());
-process.once('SIGTERM', () => void shutdown());
+function requestShutdown() {
+  void shutdown().catch((cause) => {
+    console.error(
+      JSON.stringify({
+        event: 'worker_shutdown_failed',
+        failureCode: cause instanceof Error ? cause.name : 'UnknownError',
+      }),
+    );
+    process.exitCode = 1;
+  });
+}
+process.once('SIGINT', requestShutdown);
+process.once('SIGTERM', requestShutdown);
