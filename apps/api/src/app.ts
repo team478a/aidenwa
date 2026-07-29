@@ -32,6 +32,7 @@ import { registerStage4B2Routes } from './stage4b2-routes.js';
 import { registerStage4B2MediaRoutes } from './stage4b2-media.js';
 import { registerStage4DRoutes } from './stage4d-routes.js';
 import { registerStage4ERoutes } from './stage4e-routes.js';
+import { sendPublicError, toPublicError } from './core/errors/http-error.js';
 
 const SESSION_COOKIE = 'sales_ai_session';
 const CSRF_COOKIE = 'sales_ai_csrf';
@@ -80,12 +81,9 @@ export function buildApp(environment: NodeJS.ProcessEnv = process.env, options: 
     if (ownsPrisma) await prisma.$disconnect();
   });
   app.setErrorHandler((cause, _request, reply) => {
-    if (typeof cause === 'object' && cause !== null && 'issues' in cause)
-      return error(reply, 400, 'VALIDATION_ERROR', '入力内容を確認してください');
-    if (cause instanceof Prisma.PrismaClientKnownRequestError && cause.code === 'P2002')
-      return error(reply, 409, 'DUPLICATE', '同じ一意項目を持つデータが既に存在します');
-    app.log.error(cause);
-    return error(reply, 500, 'INTERNAL_ERROR', '処理に失敗しました');
+    const mapped = toPublicError(cause);
+    if (mapped.logCause) app.log.error(cause);
+    return sendPublicError(reply, cause);
   });
 
   async function authenticate(
