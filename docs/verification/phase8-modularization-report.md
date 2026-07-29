@@ -34,7 +34,8 @@
 - Unit/API/Worker/Web configuration: 33 files, 184 tests PASS.
 - E2E: 8/8 PASS.
 - Web/API/Worker production build: PASS.
-- GitHub Actions: pending push.
+- GitHub Actions: run `30427689724` PASS for documentation commit `cabe43b`, including
+  implementation commit `08fbd72`.
 - External Provider/API/real telephone calls: 0.
 
 ### Verification

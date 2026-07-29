@@ -8,10 +8,9 @@
   - Unit/API/Worker/Web configuration: 184 tests PASS locally after shared error mapping
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30412573369` PASS at the prior Import modularization branch tip;
-    shared-error commit CI pending push
+  - GitHub Actions: run `30427689724` PASS for shared DomainError/HTTP mapping
   - Latest implementation commit: `08fbd72` (shared DomainError/HTTP mapping)
-  - Latest documentation commit: pending this update
+  - Latest documentation commit: `cabe43b`
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 1 (historical checkpoint)
