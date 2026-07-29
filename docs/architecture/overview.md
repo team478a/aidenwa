@@ -9,3 +9,9 @@ See `docs/decisions/0005-transactional-outbox.md` and `docs/operations/outbox-re
 The pnpm workspace separates the Next.js administration UI from the always-on Fastify API and BullMQ worker. PostgreSQL is accessed through Prisma; Redis backs jobs and ephemeral worker health. Voice vendors must remain behind `VoiceProvider`.
 
 The browser reaches the API through a same-origin Next.js rewrite. Fastify owns authentication and authorization. PostgreSQL stores revocable sessions and Redis provides login throttling; no authentication token is placed in localStorage.
+
+## Phase 8 modularization
+
+Stage-oriented files are being split incrementally into domain modules without changing public
+contracts. Imports are the first domain boundary. See `module-boundaries.md`, `api-layering.md`,
+`worker-job-boundaries.md`, and the Phase 8 verification report.

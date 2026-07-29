@@ -16,6 +16,10 @@
 Statements such as “later phases not started” below are retained only as historical checkpoint
 scope and do not describe the current repository state.
 
+The first full Phase 8 domain slice moved Import API and Worker boundaries into dedicated modules.
+Local verification after that split is 174 tests, 8 E2E tests and all production builds PASS; the
+database schema and all external-provider flags remain unchanged.
+
 ## Phase 1 — Transactional Outbox
 
 - Scope: Phase 1 only

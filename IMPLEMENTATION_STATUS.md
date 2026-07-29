@@ -5,11 +5,11 @@
   progress; external providers disabled
 - Updated: 2026-07-29
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 171 tests PASS
+  - Unit/API/Worker/Web configuration: 174 tests PASS locally after Import modularization
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30407749636` PASS
-  - Latest implementation commit: `64acbb5`
+  - GitHub Actions: run `30407749636` PASS for the pre-Import baseline; Import CI pending push
+  - Latest implementation commit: `aa75fad` (Import Worker split; GitHub Actions pending push)
   - Latest documentation commit: `fabcd9c`
   - External Provider/API/real telephone calls: 0
 
@@ -406,6 +406,26 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - GitHub Actions: run `30348610326` PASS for commit `408ec82`.
 - At this 5.1 checkpoint, additional fixes 5.2–5.4 had not started. External
   Provider/API/real telephone calls: 0.
+
+## Maintainability remediation Phase 8 — Import module
+
+- Status: implementation and local verification complete; GitHub Actions pending push.
+- Removed all eight Import endpoints and their read helper from `stage2-routes.ts`.
+- Added dedicated Import route, controller, service, repository, policy, schemas, types and
+  transactional Outbox modules without changing API URLs, payloads, responses or error codes.
+- Moved the Worker Import engine under `jobs/imports`, added mapping/processing/retry/recovery job
+  boundaries and queue-payload validation, and retained the old path as a compatibility export.
+- Database schema and migrations: unchanged.
+- Focused Import API/Worker/boundary tests: 17 PASS, including 10,000-row asynchronous mapping,
+  atomic rollback, failed-row-only retry and cleanup.
+- Prisma generate / format / validate: PASS.
+- lint / format check / typecheck: PASS.
+- Unit/API/Worker/Web config: 32 files, 174 tests PASS.
+- E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- External Provider/API/real telephone calls: 0.
+- Implementation commits: API `9f085ae`; Worker `aa75fad`.
+- Next Phase 8 slice: common typed error mapping; Appointment and later modules are not changed.
 
 ## Additional fix 5.2 — Next.js API destination
 

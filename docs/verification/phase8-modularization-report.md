@@ -1,0 +1,36 @@
+# Phase 8 modularization report
+
+## Progress-document alignment
+
+- Commit: `20d7259`.
+- Updated the status header and historical checkpoint wording.
+- No API, database or runtime changes.
+
+## Import module
+
+- Base commit: `20d7259`.
+- API implementation commit: `9f085ae`.
+- Worker implementation commit: `aa75fad`.
+- Moved API transport parsing, state policy, service transitions, organization-scoped reads and
+  transactional Outbox intent under `apps/api/src/modules/imports`.
+- Moved the Worker engine under `apps/worker/src/jobs/imports` and retained a compatibility export.
+- Added mapping, processing, retry and recovery job boundaries with queue-payload validation.
+- Existing eight Import API URLs and all request/response/error contracts are unchanged.
+- Database changes and migrations: none.
+- External Provider/API/real telephone calls: 0.
+
+### Verification
+
+- Focused Import API/Worker/boundary tests: 17 PASS.
+- Prisma generate / format / validate: PASS.
+- lint / format check / typecheck: PASS.
+- Unit/API/Worker/Web configuration: 32 files, 174 tests PASS.
+- E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- GitHub Actions: pending implementation push.
+
+### Remaining Phase 8 work
+
+- Shared DomainError mapping.
+- Appointment, Mock Call and Production Call domain splits.
+- Worker bootstrap/registry split.

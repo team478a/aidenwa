@@ -8,6 +8,19 @@
   checkpoints without deleting their evidence.
 - Made zero real telephone or external Provider calls.
 
+## 2026-07-29 — Phase 8 Import module
+
+- Extracted all Import API routes from `stage2-routes.ts` into a domain module with controller,
+  service, repository, policy, schema, type and Outbox boundaries.
+- Moved the Worker Import engine into `jobs/imports` and added mapping, processing, retry and
+  recovery adapters with queue-payload validation.
+- Preserved the former Worker import path as a compatibility-only export.
+- Added Import state-policy and queue-boundary tests.
+- Verified Prisma generation/format/validation, static checks, 174 Unit/API/Worker/Web
+  configuration tests, 8 E2E tests and all production builds.
+- Committed the API split as `9f085ae` and the Worker split as `aa75fad`.
+- Changed no database schema and made zero real telephone or external Provider calls.
+
 ## 2026-07-19 — Stage 4B-1 code implementation (tests deferred)
 
 - Corrected README stage status before beginning Stage 4B-1.
