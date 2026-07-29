@@ -4,7 +4,7 @@ import { PrismaClient } from '@sales-ai/database';
 import { workerEnvSchema } from '@sales-ai/validation/env';
 import { processMockCall } from './mock-call.js';
 import { processProviderWebhook } from './provider-webhook.js';
-import { mapCompanyImport, processCompanyImport } from './company-import.js';
+import { processImportJob } from './jobs/imports/index.js';
 import { processTwilioCall, stopTwilioExecutions } from './twilio-call.js';
 import {
   maintenanceJobNames,
@@ -52,14 +52,7 @@ async function processor(job: Job) {
     await processMockCall(prisma, data.callJobId, data.organizationId);
     return;
   }
-  if (job.name === 'company-import-mapping') {
-    const data = job.data as { importJobId: string; organizationId: string };
-    await mapCompanyImport(prisma, data);
-    return;
-  }
-  if (job.name !== 'company-import') return;
-  const data = job.data as { importJobId: string; organizationId: string };
-  await processCompanyImport(prisma, data);
+  await processImportJob(job, prisma);
 }
 
 const worker = new Worker('sales-ai-jobs', processor, {
