@@ -1,10 +1,19 @@
 # Implementation Status
 
-- Current stage: Maintainability remediation Phase 1 — Transactional Outbox complete
-- Release state: Phase 1 local verification and GitHub CI complete; external providers disabled
-- Updated: 2026-07-24
+- Current stage: Maintainability remediation Phase 8 — incremental modularization in progress
+- Release state: Phase 1–7 and additional fixes 5.1–5.4 verified; Phase 8 modularization in
+  progress; external providers disabled
+- Updated: 2026-07-29
+- Latest verification:
+  - Unit/API/Worker/Web configuration: 171 tests PASS
+  - E2E: 8/8 PASS
+  - Production build: Web/API/Worker PASS
+  - GitHub Actions: run `30407749636` PASS
+  - Latest implementation commit: `64acbb5`
+  - Latest documentation commit: `fabcd9c`
+  - External Provider/API/real telephone calls: 0
 
-## Maintainability remediation Phase 1
+## Maintainability remediation Phase 1 (historical checkpoint)
 
 - PostgreSQL transactional outbox added for company import, mock calls, Twilio limited calls, emergency stops and authorization rollback
 - API business state and outbox intent now commit atomically; existing response formats are unchanged
@@ -19,13 +28,13 @@
 - Production build: Web/API/Worker PASS
 - GitHub Actions: run `30030010473` PASS for commit `d5371a2`
 - External connections and real telephone calls: 0
-- Phase 2 and later: not started
+- At this Phase 1 checkpoint, Phase 2 and later had not started.
 - Detailed report: `docs/verification/maintainability-remediation-report.md`
 
-## Stage 4F completion audit
+## Stage 4F completion audit (historical checkpoint)
 
 - Checkpoints 1–6: PASS
-- Checkpoint 7: local CI-equivalent PASS; GitHub Actions pending because push/remote execution was not authorized
+- Checkpoint 7 was locally PASS; GitHub Actions was still pending at this historical checkpoint.
 - Prisma: format / validate / generate PASS
 - Empty DB: all 11 migrations + seed PASS; extension, exclusion constraint and zero schema drift confirmed; temporary DB deleted
 - lint / format / typecheck: PASS
@@ -35,7 +44,9 @@
 - Audit data: 790 rows inspected, forbidden secret/CSV keys 0
 - External provider and telephone calls: 0
 - Detailed evidence: `docs/verification/stage4f-report.md`
-- Remaining: GitHub Actions, deployment, production migration and all real-provider tests
+- Remaining at this historical checkpoint included GitHub Actions, deployment, production
+  migration and all real-provider tests. GitHub Actions has since passed; deployment and
+  real-provider work remain disabled/unexecuted.
 
 ## Stage 4A implemented
 
@@ -319,9 +330,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - lint/format/typecheck, all 8 E2E (including invalid transition HTTP 409) and Web/API/Worker
   production build: PASS.
 - GitHub Actions: run `30089496742` PASS for Phase 5 commit `4a9714a`.
-- Phase 6: complete; GitHub Actions PASS.
-- Phase 7: complete locally; GitHub Actions pending.
-- Phase 8 and later: not started.
+- At this Phase 5 checkpoint, Phase 6–8 were not part of the completed scope.
 - External Provider/API/real telephone calls: 0.
 
 ## Maintainability remediation Phase 6
@@ -378,7 +387,8 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Web/API/Worker production build: PASS.
 - Operations guide: `docs/runbooks/worker-maintenance.md`.
 - GitHub Actions: run `30347090048` PASS for Phase 7 commit `79ec2be`.
-- Phase 8 and later were not changed. External Provider/API/real telephone calls: 0.
+- At this Phase 7 checkpoint, Phase 8 had not yet changed. External Provider/API/real telephone
+  calls: 0.
 
 ## Maintainability remediation Phase 8 / additional fix 5.1
 
@@ -394,7 +404,8 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - E2E: 8/8 PASS.
 - Web/API/Worker production build: PASS.
 - GitHub Actions: run `30348610326` PASS for commit `408ec82`.
-- Additional fixes 5.2–5.4 are not started. External Provider/API/real telephone calls: 0.
+- At this 5.1 checkpoint, additional fixes 5.2–5.4 had not started. External
+  Provider/API/real telephone calls: 0.
 
 ## Additional fix 5.2 — Next.js API destination
 
@@ -411,7 +422,8 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - E2E: 8/8 PASS.
 - Web/API/Worker production build: PASS.
 - GitHub Actions: run `30350328162` PASS for implementation commit `d57079c`.
-- Additional fixes 5.3–5.4 are not started. External Provider/API/real telephone calls: 0.
+- At this 5.2 checkpoint, additional fixes 5.3–5.4 had not started. External
+  Provider/API/real telephone calls: 0.
 
 ## Additional fix 5.3 — Manager authorization scope
 
@@ -431,7 +443,8 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - E2E: 8/8 PASS.
 - Web/API/Worker production build: PASS.
 - GitHub Actions: run `30352605396` PASS for implementation commit `feab23e`.
-- Additional fix 5.4 is not started. External Provider/API/real telephone calls: 0.
+- At this 5.3 checkpoint, additional fix 5.4 had not started. External Provider/API/real telephone
+  calls: 0.
 
 ## Additional fix 5.4 — Scenario structural validation
 
@@ -460,7 +473,8 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - シナリオUIはフォームで標準graphを作る簡易版で、ドラッグ式エディタではありません。
 - Mock実行は1件ずつで、実通話相当の予測ダイヤラーではありません。
 - call eventは`CALL_EVENT_RETENTION_DAYS`より古いものをWorkerの定期cleanupで削除します。
-- GitHub Actions実ジョブはpush/PR未実施のため未確認です。
+- 上記の未確認記録は各Stage単独実装時点の履歴です。最新GitHub Actions run
+  `30407749636`はPASSしています。
 
 ## Stage 4 gate
 
@@ -470,7 +484,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - 現在の承認状態: Pending approval（実Provider接続・実番号発信は禁止）
 - Stage 4A実装指示書: 確認・実装済み
 - Stage 4A technical readiness: completed locally（実電話は無効）
-- GitHub Actions: push/PRを行っていないため未実行。成功扱いにはしない
+- GitHub Actions: run `30407749636` PASS（実Provider接続の承認を意味しない）
 - Stage 4B開始条件: 対象法令、Provider、AI開示、録音/文字起こし同意、発信条件、責任者、限定対象、受入・rollback、書面承認を確定すること
 
 ## Stage 4A completion audit
@@ -479,4 +493,5 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - 完全E2E: 必須項目不足拒否→完全draft→申請→`system_admin`承認→上限/allowlist/Mock Provider設定→Production Call Gate通過をPASS。
 - Webhook再試行: `mock.fail_once`をBullMQへ最大3回投入し、初回失敗→再配送成功→重複実行無害化をWorkerテストでPASS。
 - ローカルStage 4A完了条件: PASS。
-- GitHub Actions実CI: push/PR未実施のため未実行。ローカル完了と分けて記録する。
+- GitHub Actions実CI: run `30407749636` PASS。実Provider接続・実電話の承認状態とは分離して
+  記録する。

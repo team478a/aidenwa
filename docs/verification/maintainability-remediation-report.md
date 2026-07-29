@@ -1,5 +1,21 @@
 # Maintainability remediation report
 
+## Current status — 2026-07-29
+
+- Phase 1–7 and additional fixes 5.1–5.4: verified.
+- Phase 8: incremental modularization in progress; callable-window policy extraction is complete
+  and Import is the next domain boundary.
+- Latest implementation commit: `64acbb5`.
+- Latest documentation commit before this alignment: `fabcd9c`.
+- Unit/API/Worker/Web configuration: 171 tests PASS.
+- E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- GitHub Actions: run `30407749636` PASS.
+- External Provider/API/real telephone calls: 0.
+
+Statements such as “later phases not started” below are retained only as historical checkpoint
+scope and do not describe the current repository state.
+
 ## Phase 1 — Transactional Outbox
 
 - Scope: Phase 1 only
