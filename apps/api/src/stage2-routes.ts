@@ -1,14 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
-import { parse } from 'csv-parse/sync';
-import iconv from 'iconv-lite';
-import { randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient, UserRole } from '@sales-ai/database';
 import {
   normalizeCompanyName,
   normalizeEmail,
   normalizePhoneNumber,
-  neutralizeCsvFormula,
 } from '@sales-ai/shared/stage2';
 import {
   companyIdsSchema,
@@ -18,7 +14,6 @@ import {
   contactInputSchema,
   contactPatchSchema,
   idParamsSchema,
-  mappingSchema,
   optOutCheckSchema,
   optOutInputSchema,
   phoneInputSchema,
@@ -30,7 +25,7 @@ import {
   tagPatchSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
-import { enqueueOutbox } from './outbox.js';
+import { registerImportRoutes } from './modules/imports/import.routes.js';
 import { checkOptOut, findDuplicateCandidates } from './stage2-services.js';
 import type { AuthContext } from './types.js';
 
@@ -90,6 +85,15 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
       await prisma.user.findFirst({ where: { id, organizationId, status: 'active' } }),
     );
   }
+  registerImportRoutes(app, {
+    prisma,
+    env: deps.env,
+    authenticate: (request, reply) => deps.authenticate(request, reply),
+    mutationAuth,
+    error: (reply, code, key, message) => deps.error(reply, code, key, message),
+    audit: (request, auth, action, entityType, entityId, afterData) =>
+      auditChild(request, auth, action, entityType, entityId, undefined, afterData),
+  });
 
   app.get('/api/v1/companies', async (request, reply) => {
     const auth = await deps.authenticate(request, reply);
@@ -593,198 +597,6 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
     return { optOut };
   });
 
-  app.post('/api/v1/imports/companies/upload', async (request, reply) => {
-    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
-    if (!auth) return;
-    const file = await request.file();
-    if (!file || !file.filename.toLowerCase().endsWith('.csv'))
-      return deps.error(reply, 400, 'INVALID_FILE', 'CSVファイルを選択してください');
-    const buffer = await file.toBuffer();
-    if (buffer.length > deps.env.CSV_MAX_BYTES)
-      return deps.error(reply, 413, 'FILE_TOO_LARGE', 'ファイルサイズ上限を超えています');
-    const encoding = String(
-      file.fields.encoding && 'value' in file.fields.encoding ? file.fields.encoding.value : 'utf8',
-    ).toLowerCase();
-    let text: string;
-    try {
-      text =
-        encoding === 'cp932' || encoding === 'shift_jis'
-          ? iconv.decode(buffer, 'cp932')
-          : buffer.toString('utf8').replace(/^\uFEFF/u, '');
-    } catch {
-      return deps.error(reply, 400, 'ENCODING_ERROR', '文字コードを変換できません');
-    }
-    let records: Record<string, string>[];
-    try {
-      records = parse(text, {
-        columns: true,
-        skip_empty_lines: true,
-        relax_quotes: false,
-        bom: true,
-        trim: true,
-      });
-    } catch {
-      return deps.error(reply, 400, 'CSV_PARSE_ERROR', 'CSV形式を解析できません');
-    }
-    if (records.length > deps.env.CSV_MAX_ROWS)
-      return deps.error(reply, 413, 'TOO_MANY_ROWS', 'CSV行数上限を超えています');
-    const job = await prisma.importJob.create({
-      data: {
-        organizationId: auth.organizationId,
-        originalFileName: file.filename.replace(/[\r\n]/gu, '_'),
-        storageKey: `db://${randomUUID()}`,
-        encoding,
-        status: 'mapping_required',
-        totalRows: records.length,
-        createdBy: auth.userId,
-        expiresAt: new Date(Date.now() + deps.env.IMPORT_RETENTION_HOURS * 3_600_000),
-        rows: {
-          create: records.map((record, index) => ({
-            rowNumber: index + 2,
-            rawData: sanitizeCsvRecord(record),
-            normalizedData: {},
-            validationErrors: [],
-          })),
-        },
-      },
-    });
-    await auditChild(request, auth, 'import.uploaded', 'import_job', job.id, undefined, {
-      originalFileName: job.originalFileName,
-      totalRows: job.totalRows,
-      encoding,
-    });
-    return reply.code(201).send({ importJob: job, headers: Object.keys(records[0] ?? {}) });
-  });
-  app.post('/api/v1/imports/companies/:id/mapping', async (request, reply) => {
-    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const input = mappingSchema.parse(request.body);
-    const job = await prisma.importJob.findFirst({
-      where: { id, organizationId: auth.organizationId },
-    });
-    if (!job) return deps.error(reply, 404, 'NOT_FOUND', 'インポートが見つかりません');
-    const updated = await prisma.$transaction(async (tx) => {
-      const importJob = await tx.importJob.update({
-        where: { id },
-        data: {
-          mapping: input.mapping,
-          duplicatePolicy: input.duplicatePolicy,
-          validRows: 0,
-          errorRows: 0,
-          status: 'mapping_required',
-        },
-      });
-      await enqueueOutbox(tx, {
-        organizationId: auth.organizationId,
-        eventType: 'company-import-mapping',
-        aggregateType: 'import_job',
-        aggregateId: id,
-        payload: { importJobId: id, organizationId: auth.organizationId },
-      });
-      return importJob;
-    });
-    return reply.code(202).send({ importJob: updated });
-  });
-  app.get('/api/v1/imports/companies/:id/preview', async (request, reply) =>
-    importRead(request, reply, 'preview'),
-  );
-  app.get('/api/v1/imports/companies/:id/status', async (request, reply) =>
-    importRead(request, reply, 'status'),
-  );
-  app.get('/api/v1/imports/companies/:id/errors', async (request, reply) =>
-    importRead(request, reply, 'errors'),
-  );
-  app.post('/api/v1/imports/companies/:id/execute', async (request, reply) => {
-    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const job = await prisma.importJob.findFirst({
-      where: { id, organizationId: auth.organizationId },
-    });
-    if (!job) return deps.error(reply, 404, 'NOT_FOUND', 'インポートが見つかりません');
-    if (!['preview_ready', 'queued'].includes(job.status))
-      return deps.error(reply, 409, 'INVALID_STATE', '実行できない状態です');
-    await prisma.$transaction(async (tx) => {
-      await tx.importJob.update({ where: { id }, data: { status: 'queued' } });
-      await enqueueOutbox(tx, {
-        organizationId: auth.organizationId,
-        eventType: 'company-import',
-        aggregateType: 'import_job',
-        aggregateId: id,
-        payload: { importJobId: id, organizationId: auth.organizationId },
-      });
-    });
-    await auditChild(request, auth, 'import.executed', 'import_job', id, undefined, {
-      status: 'queued',
-      totalRows: job.totalRows,
-    });
-    return reply.code(202).send({ importJobId: id, status: 'queued' });
-  });
-  app.post('/api/v1/imports/companies/:id/retry-failed', async (request, reply) => {
-    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const job = await prisma.importJob.findFirst({
-      where: { id, organizationId: auth.organizationId },
-    });
-    if (!job) return deps.error(reply, 404, 'NOT_FOUND', 'インポートが見つかりません');
-    if (!['completed_with_errors', 'failed'].includes(job.status))
-      return deps.error(reply, 409, 'INVALID_STATE', '失敗行を再実行できない状態です');
-
-    const failedCount = await prisma.importRow.count({
-      where: { importJobId: id, processingStatus: 'failed' },
-    });
-    if (!failedCount)
-      return deps.error(reply, 409, 'NO_FAILED_ROWS', '再実行対象の失敗行がありません');
-
-    await prisma.$transaction(async (tx) => {
-      await tx.importRow.updateMany({
-        where: { importJobId: id, processingStatus: 'failed' },
-        data: {
-          processingStatus: 'pending',
-          processedAt: null,
-          lastErrorCode: null,
-          lastErrorMessage: null,
-        },
-      });
-      await tx.importJob.update({
-        where: { id },
-        data: { status: 'queued', completedAt: null, errorMessage: null },
-      });
-      await enqueueOutbox(tx, {
-        organizationId: auth.organizationId,
-        eventType: 'company-import',
-        aggregateType: 'import_job_retry',
-        aggregateId: randomUUID(),
-        payload: { importJobId: id, organizationId: auth.organizationId },
-      });
-    });
-    await auditChild(request, auth, 'import.failed_rows_retried', 'import_job', id, undefined, {
-      status: 'queued',
-      failedRows: failedCount,
-    });
-    return reply.code(202).send({ importJobId: id, status: 'queued', failedRows: failedCount });
-  });
-  app.post('/api/v1/imports/companies/:id/cancel', async (request, reply) => {
-    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const result = await prisma.importJob.updateMany({
-      where: {
-        id,
-        organizationId: auth.organizationId,
-        status: { in: ['uploaded', 'mapping_required', 'preview_ready', 'queued'] },
-      },
-      data: { status: 'cancelled', completedAt: new Date() },
-    });
-    if (!result.count) return deps.error(reply, 409, 'INVALID_STATE', 'キャンセルできません');
-    await auditChild(request, auth, 'import.cancelled', 'import_job', id, undefined, {
-      status: 'cancelled',
-    });
-    return { status: 'cancelled' };
-  });
-
   async function childList(
     request: FastifyRequest,
     reply: FastifyReply,
@@ -1018,32 +830,6 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
     );
     return { results };
   }
-  async function importRead(
-    request: FastifyRequest,
-    reply: FastifyReply,
-    mode: 'preview' | 'status' | 'errors',
-  ) {
-    const auth = await deps.authenticate(request, reply);
-    if (!auth || auth.role === UserRole.sales)
-      return auth ? deps.error(reply, 403, 'FORBIDDEN', 'インポート権限がありません') : undefined;
-    const { id } = idParamsSchema.parse(request.params);
-    const job = await prisma.importJob.findFirst({
-      where: { id, organizationId: auth.organizationId },
-    });
-    if (!job) return deps.error(reply, 404, 'NOT_FOUND', 'インポートが見つかりません');
-    if (mode === 'status') return { importJob: job };
-    return {
-      importJob: job,
-      rows: await prisma.importRow.findMany({
-        where: {
-          importJobId: id,
-          ...(mode === 'errors' ? { NOT: { validationErrors: { equals: [] } } } : {}),
-        },
-        orderBy: { rowNumber: 'asc' },
-        take: mode === 'preview' ? 100 : 1000,
-      }),
-    };
-  }
   async function auditChild(
     request: FastifyRequest,
     auth: AuthContext,
@@ -1068,12 +854,4 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
 
 function clean<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
-}
-function sanitizeCsvRecord(record: Record<string, string>) {
-  return Object.fromEntries(
-    Object.entries(record).map(([key, value]) => [
-      neutralizeCsvFormula(key),
-      neutralizeCsvFormula(String(value)),
-    ]),
-  );
 }
