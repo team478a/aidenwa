@@ -15,3 +15,7 @@ The browser reaches the API through a same-origin Next.js rewrite. Fastify owns 
 Stage-oriented files are being split incrementally into domain modules without changing public
 contracts. Imports are the first domain boundary. See `module-boundaries.md`, `api-layering.md`,
 `worker-job-boundaries.md`, and the Phase 8 verification report.
+
+Typed domain failures now cross the HTTP boundary through a shared Fastify mapper. Unknown
+infrastructure errors retain internal logging but receive only the stable generic public response;
+domain diagnostic details are never serialized to clients.

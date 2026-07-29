@@ -5,12 +5,13 @@
   progress; external providers disabled
 - Updated: 2026-07-29
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 174 tests PASS locally after Import modularization
+  - Unit/API/Worker/Web configuration: 184 tests PASS locally after shared error mapping
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30412329357` PASS for the Import modularization
-  - Latest implementation commit: `aa75fad` (Import Worker split; GitHub Actions pending push)
-  - Latest documentation commit: `2e0d7c1`
+  - GitHub Actions: run `30412573369` PASS at the prior Import modularization branch tip;
+    shared-error commit CI pending push
+  - Latest implementation commit: `08fbd72` (shared DomainError/HTTP mapping)
+  - Latest documentation commit: pending this update
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 1 (historical checkpoint)

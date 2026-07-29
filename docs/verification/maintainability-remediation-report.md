@@ -176,3 +176,13 @@ Final Phase 2 verification:
 - GitHub Actions: run `30089496742` PASS for Phase 5 commit `4a9714a`.
 - Existing non-blocking Next.js ESLint plugin detection warning remains unchanged.
 - External provider/calendar calls / real calls: 0.
+
+## Phase 8 — Shared DomainError mapping
+
+- Added typed errors and a common Fastify HTTP conversion boundary in commit `08fbd72`.
+- Preserved existing validation, duplicate and generic internal-error responses.
+- Added non-disclosure tests proving unknown messages and domain details are not returned.
+- lint, format, workspace typechecks, 184 Unit/API/Worker/Web configuration tests, 8 E2E tests
+  and Web/API/Worker production builds: PASS.
+- Database changes: none.
+- External provider/API calls / real calls: 0.

@@ -365,3 +365,17 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   production builds.
 - Committed as `64acbb5`; GitHub Actions run `30407749636` passed.
 - Made zero real telephone or external Provider calls.
+
+## 2026-07-29 — Phase 8 shared DomainError mapping
+
+- Added typed domain errors for not-found, forbidden, conflict, invalid-state, validation,
+  tenant-scope, disabled-provider and retryable-infrastructure failures.
+- Added one Fastify error mapper while preserving the existing validation, duplicate and internal
+  API error contracts.
+- Kept domain `details` out of HTTP responses and prevented unknown internal error messages from
+  reaching clients.
+- Added 10 focused mapping and non-disclosure tests.
+- Verified lint, format, workspace typechecks, 184 Unit/API/Worker/Web configuration tests, 8 E2E
+  tests and Web/API/Worker production builds.
+- Database schema and migrations were unchanged.
+- Made zero real telephone or external Provider/API calls.

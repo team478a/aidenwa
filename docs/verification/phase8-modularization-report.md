@@ -19,6 +19,24 @@
 - Database changes and migrations: none.
 - External Provider/API/real telephone calls: 0.
 
+## Shared DomainError and HTTP mapping
+
+- Implementation commit: `08fbd72`.
+- Added typed domain errors under `apps/api/src/core/errors`.
+- Fastify now maps typed domain errors, validation failures, Prisma unique conflicts and unknown
+  failures through one safe response boundary.
+- Existing API error codes, statuses and response envelopes remain unchanged.
+- Domain diagnostic details are intentionally excluded from public responses, and unknown error
+  messages are replaced with the existing generic internal-error response.
+- Database changes and migrations: none.
+- Focused error-mapping/API-health tests: 11 PASS.
+- lint / format check / workspace typechecks: PASS.
+- Unit/API/Worker/Web configuration: 33 files, 184 tests PASS.
+- E2E: 8/8 PASS.
+- Web/API/Worker production build: PASS.
+- GitHub Actions: pending push.
+- External Provider/API/real telephone calls: 0.
+
 ### Verification
 
 - Focused Import API/Worker/boundary tests: 17 PASS.
@@ -32,6 +50,5 @@
 
 ### Remaining Phase 8 work
 
-- Shared DomainError mapping.
 - Appointment, Mock Call and Production Call domain splits.
 - Worker bootstrap/registry split.
