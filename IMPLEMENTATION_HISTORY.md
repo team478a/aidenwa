@@ -19,6 +19,8 @@
 - Verified Prisma generation/format/validation, static checks, 174 Unit/API/Worker/Web
   configuration tests, 8 E2E tests and all production builds.
 - Committed the API split as `9f085ae` and the Worker split as `aa75fad`.
+- Committed the architecture and verification documentation as `2e0d7c1`; GitHub Actions run
+  `30412329357` passed.
 - Changed no database schema and made zero real telephone or external Provider calls.
 
 ## 2026-07-19 — Stage 4B-1 code implementation (tests deferred)

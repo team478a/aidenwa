@@ -8,9 +8,9 @@
   - Unit/API/Worker/Web configuration: 174 tests PASS locally after Import modularization
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30407749636` PASS for the pre-Import baseline; Import CI pending push
+  - GitHub Actions: run `30412329357` PASS for the Import modularization
   - Latest implementation commit: `aa75fad` (Import Worker split; GitHub Actions pending push)
-  - Latest documentation commit: `fabcd9c`
+  - Latest documentation commit: `2e0d7c1`
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 1 (historical checkpoint)
@@ -409,7 +409,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 
 ## Maintainability remediation Phase 8 — Import module
 
-- Status: implementation and local verification complete; GitHub Actions pending push.
+- Status: implementation and verification complete.
 - Removed all eight Import endpoints and their read helper from `stage2-routes.ts`.
 - Added dedicated Import route, controller, service, repository, policy, schemas, types and
   transactional Outbox modules without changing API URLs, payloads, responses or error codes.
@@ -425,6 +425,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Web/API/Worker production build: PASS.
 - External Provider/API/real telephone calls: 0.
 - Implementation commits: API `9f085ae`; Worker `aa75fad`.
+- Documentation commit: `2e0d7c1`; GitHub Actions run `30412329357` PASS.
 - Next Phase 8 slice: common typed error mapping; Appointment and later modules are not changed.
 
 ## Additional fix 5.2 — Next.js API destination

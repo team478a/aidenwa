@@ -19,6 +19,7 @@ scope and do not describe the current repository state.
 The first full Phase 8 domain slice moved Import API and Worker boundaries into dedicated modules.
 Local verification after that split is 174 tests, 8 E2E tests and all production builds PASS; the
 database schema and all external-provider flags remain unchanged.
+GitHub Actions run `30412329357` passed for the complete Import modularization commit set.
 
 ## Phase 1 — Transactional Outbox
 
