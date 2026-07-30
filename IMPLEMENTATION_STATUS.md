@@ -5,12 +5,12 @@
   providers disabled
 - Updated: 2026-07-30
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 193 tests PASS in CI
+  - Unit/API/Worker/Web configuration: 195 tests PASS in CI
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30554930335` PASS for Phase 9 Stage 2 Contacts split
-  - Latest implementation commit: `468449e` (Stage 2 Contacts modularization)
-  - Latest documentation commit: `ed4a8dd` (Companies verification)
+  - GitHub Actions: run `30587455268` PASS for Phase 9 Stage 2 Phone Numbers split
+  - Latest implementation commit: `1266ceb` (Stage 2 Phone Numbers modularization)
+  - Latest documentation commit: `66cdc06` (Contacts verification)
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 9
@@ -19,7 +19,8 @@
 - Step 2 — Stage 2 sales-data modularization: IN PROGRESS
   - Companies: COMPLETE
   - Contacts: COMPLETE
-  - Phone Numbers / Tags / Sales Lists / OptOuts: pending
+  - Phone Numbers: COMPLETE
+  - Tags / Sales Lists / OptOuts: pending
 - `processMockCall` is implemented in
   `apps/worker/src/modules/mock-calls/mock-call.service.ts`.
 - `apps/worker/src/mock-call.ts` is a compatibility-export boundary only.
@@ -32,9 +33,10 @@
   typecheck, 190 unit/API tests, E2E 8/8 and production build PASS.
 - External Provider/API/real telephone calls: 0.
 - Companies routes now use dedicated Route, Controller, Service, Repository and Policy layers.
-- `stage2-routes.ts` was reduced from 857 to 589 lines without URL or payload changes.
-- CI run `30554930335`: 193 unit/API tests, E2E 8/8 and all verification steps PASS.
-- Next domain: Phone Numbers.
+- `stage2-routes.ts` was reduced from 857 to 471 lines without URL or payload changes.
+- Phone audit projections now retain only a masked number and non-sensitive state fields.
+- CI run `30587455268`: 195 unit/API tests, E2E 8/8 and all verification steps PASS.
+- Next domain: Tags.
 
 ## Maintainability remediation Phase 1 (historical checkpoint)
 

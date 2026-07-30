@@ -522,3 +522,16 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30554930335` passed Prisma checks, migrations, seed, lint, format,
   typecheck, 193 tests, E2E 8/8 and all production builds.
 - Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
+
+## 2026-07-31 — Phase 9 Step 2 Phone Numbers domain
+
+- Split Phone Numbers into Route, Controller, Service, Repository and Policy modules.
+- Preserved Company/Contact/organization scope, normalization, FAX non-callable enforcement,
+  callable validation, Primary exclusivity and soft deletion.
+- Replaced full Phone records in create/update/delete audits with masked, non-sensitive audit
+  projections; API responses remain unchanged.
+- Reduced `stage2-routes.ts` from 589 to 471 lines.
+- Added focused tests for FAX/callable rules and absence of full numbers in audit projections.
+- GitHub Actions run `30587455268` passed Prisma checks, migrations, seed, lint, format,
+  typecheck, 195 tests, E2E 8/8 and all production builds.
+- Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.

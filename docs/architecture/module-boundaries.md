@@ -23,8 +23,16 @@ Contacts:
 - `contact.repository.ts`: organization-scoped Contact reads without Role decisions.
 - `contact.policy.ts`: inheritance of Company visibility rules.
 
-The Stage 2 sales-data split is in progress. Phone Numbers, Tags, Sales Lists and OptOuts remain
-in `stage2-routes.ts`; Import remains an independent module.
+Phone Numbers:
+
+- `phone-number.routes.ts`: existing Phone Number URL registration.
+- `phone-number.controller.ts`: Company/Contact scope, HTTP response and masked audit boundary.
+- `phone-number.service.ts`: normalization, Primary transaction and mutation behavior.
+- `phone-number.repository.ts`: organization-scoped Phone and Contact reads.
+- `phone-number.policy.ts`: FAX/callable and safe audit-projection rules.
+
+The Stage 2 sales-data split is in progress. Tags, Sales Lists and OptOuts remain in
+`stage2-routes.ts`; Import remains an independent module.
 
 ### Imports
 
