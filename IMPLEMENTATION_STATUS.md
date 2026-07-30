@@ -537,7 +537,12 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Worker implementation commit `a7fb9c5`; GitHub Actions run `30526940705` PASS.
 - API policy implementation commit `c3132e9`; GitHub Actions run `30527407882` PASS.
 - Database schema and migrations: unchanged. External Provider calls and real telephone calls: 0.
-- Remaining: API authorization/reservation/Webhook/incident route-service split.
+- API manual reservation Service and Twilio Webhook/incident Services are now extracted.
+- Reservation commit `e1aa0d2`; GitHub Actions run `30528418820` PASS.
+- Webhook/incident commit `84631c1`; GitHub Actions run `30528857700` PASS.
+- `stage4b-routes.ts` reduced from 933 lines before this split to 558 lines.
+- Remaining: API authorization/source-number/incident administration and real-call query
+  route-service split.
 
 ## Stage 4A completion audit
 

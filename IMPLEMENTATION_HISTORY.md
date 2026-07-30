@@ -440,3 +440,16 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions runs `30526940705` and `30527407882` passed the complete pipeline.
 - Database schema and migrations were unchanged.
 - Made zero external Provider/API calls and zero real telephone calls.
+
+## 2026-07-30 — Phase 8 Production Call reservation and Webhook boundaries
+
+- Extracted the manual production-call reservation Service while retaining organization scope,
+  Production Gate evaluation, Serializable isolation, PostgreSQL advisory lock, maximum-five-call
+  limit, destination reuse prevention, concurrency/rate limits, budget reservation and
+  transactional Outbox intent.
+- Extracted Twilio TwiML/DTMF/status handling with signature validation, Call SID correlation,
+  DTMF stop behavior, duplicate-event handling and Webhook Event/Outbox transaction intact.
+- Extracted deduplicated production incident creation.
+- Reduced `stage4b-routes.ts` from 739 to 558 lines in this increment.
+- GitHub Actions runs `30528418820` and `30528857700` passed the complete pipeline.
+- Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.

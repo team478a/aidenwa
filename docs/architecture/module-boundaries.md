@@ -89,7 +89,16 @@ Worker:
 - `production-call.repository.ts`: rejected-execution persistence and audit.
 - `jobs/production-calls/*`: dispatch, rollback and cost-reconciliation entry points.
 
-API Policy and Provider construction are also under `modules/production-calls`. Authorization,
-reservation and Webhook route-service extraction remains in progress.
+API:
+
+- `reservation.service.ts`: organization-scoped eligibility plus serialized limit/budget
+  reservation and transactional Outbox intent.
+- `twilio-webhook.service.ts`: signature/correlation validation, TwiML/DTMF responses and durable
+  Provider Webhook event ingestion.
+- `incident.service.ts`: deduplicated sanitized Production Incident creation.
+- `production-call.policy.ts` and `provider.ts`: fail-closed activation, pure mappings and Provider
+  construction.
+
+Authorization/source-number/incident administration and real-call query extraction remains.
 
 Worker bootstrap remains a later Phase 8 slice.

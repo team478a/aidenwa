@@ -221,6 +221,15 @@ Final Phase 2 verification:
   production builds.
 - Database changes and external Provider/real-call activity: none.
 
+### Production Call reservation and Webhook extraction
+
+- Commit `e1aa0d2` moved serialized manual reservation and transactional Outbox intent into a
+  dedicated Service; CI run `30528418820` passed.
+- Commit `84631c1` moved Twilio Webhook and incident behavior into dedicated Services; CI run
+  `30528857700` passed.
+- Route size fell from 933 lines before Production Call API extraction to 558 lines.
+- Database changes and external Provider/real-call activity: none.
+
 ## Phase 8 — Production Call first increment
 
 - Commit `a7fb9c5` split Worker dispatch, rollback, expiry, cost, Provider and persistence

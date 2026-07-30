@@ -86,7 +86,7 @@
 
 ### Remaining Phase 8 work
 
-- Production Call API authorization/reservation/Webhook/incident split.
+- Production Call API authorization/source-number/incident administration and query split.
 - Worker bootstrap/registry split.
 
 ## Production Call / Twilio — first increment
@@ -102,6 +102,20 @@
 - Database changes and migrations: none.
 - External Provider/API/real telephone calls: 0.
 - Remaining split target: API authorization, reservation, Webhook and incident services.
+
+### Production Call reservation and Webhook increment
+
+- Reservation implementation commit `e1aa0d2`; GitHub Actions run `30528418820` PASS.
+- Webhook/incident implementation commit `84631c1`; GitHub Actions run `30528857700` PASS.
+- Preserved Serializable isolation, advisory lock, all call/destination/concurrency/rate/budget
+  limits and RealCallExecution/Outbox transaction.
+- Preserved Twilio signature validation, Call SID correlation, DTMF stop, duplicate delivery and
+  ProviderWebhookEvent/Outbox transaction.
+- `stage4b-routes.ts` is now 558 lines, down from 933 before Production Call API extraction.
+- Database changes and migrations: none.
+- External Provider/API/real telephone calls: 0.
+- Remaining split target: authorization/source-number/incident administration and real-call
+  query handlers.
 
 ## Mock Call module
 
