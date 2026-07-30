@@ -9,8 +9,6 @@ import {
 import {
   companyIdsSchema,
   companyQuerySchema,
-  contactInputSchema,
-  contactPatchSchema,
   idParamsSchema,
   optOutCheckSchema,
   optOutInputSchema,
@@ -24,6 +22,7 @@ import {
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
 import { registerCompanyRoutes } from './modules/companies/company.routes.js';
+import { registerContactRoutes } from './modules/contacts/contact.routes.js';
 import { registerImportRoutes } from './modules/imports/import.routes.js';
 import { checkOptOut, findDuplicateCandidates } from './stage2-services.js';
 import type { AuthContext } from './types.js';
@@ -76,32 +75,9 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
       auditChild(request, auth, action, entityType, entityId, undefined, afterData),
   });
   registerCompanyRoutes(app, deps);
-
-  app.get('/api/v1/companies/:id/contacts', async (request, reply) =>
-    childList(request, reply, 'contact'),
-  );
-  app.post('/api/v1/companies/:id/contacts', async (request, reply) => {
-    const auth = await mutationAuth(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    if (!(await getCompany(auth, id)))
-      return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
-    const input = contactInputSchema.parse(request.body);
-    const contact = await prisma.companyContact.create({
-      data: {
-        organizationId: auth.organizationId,
-        companyId: id,
-        ...clean(input),
-        email: normalizeEmail(input.email),
-      },
-    });
-    await auditChild(request, auth, 'contact.created', 'contact', contact.id, undefined, contact);
-    return reply.code(201).send({ contact });
-  });
-  app.patch('/api/v1/contacts/:id', async (request, reply) => updateContact(request, reply, false));
-  app.delete('/api/v1/contacts/:id', async (request, reply) => updateContact(request, reply, true));
+  registerContactRoutes(app, deps);
   app.get('/api/v1/companies/:id/phone-numbers', async (request, reply) =>
-    childList(request, reply, 'phone'),
+    phoneList(request, reply),
   );
   app.post('/api/v1/companies/:id/phone-numbers', async (request, reply) => {
     const auth = await mutationAuth(request, reply);
@@ -394,58 +370,17 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
     return { optOut };
   });
 
-  async function childList(
-    request: FastifyRequest,
-    reply: FastifyReply,
-    kind: 'contact' | 'phone',
-  ) {
+  async function phoneList(request: FastifyRequest, reply: FastifyReply) {
     const auth = await deps.authenticate(request, reply);
     if (!auth) return;
     const { id } = idParamsSchema.parse(request.params);
     if (!(await getCompany(auth, id)))
       return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
-    return kind === 'contact'
-      ? {
-          contacts: await prisma.companyContact.findMany({
-            where: { organizationId: auth.organizationId, companyId: id, isDeleted: false },
-          }),
-        }
-      : {
-          phoneNumbers: await prisma.phoneNumber.findMany({
-            where: { organizationId: auth.organizationId, companyId: id, isDeleted: false },
-          }),
-        };
-  }
-  async function updateContact(request: FastifyRequest, reply: FastifyReply, deleted: boolean) {
-    const auth = await mutationAuth(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const before = await prisma.companyContact.findFirst({
-      where: { id, organizationId: auth.organizationId, isDeleted: false },
-      include: { company: true },
-    });
-    if (!before || !(await getCompany(auth, before.companyId)))
-      return deps.error(reply, 404, 'NOT_FOUND', '担当者が見つかりません');
-    const input = deleted ? {} : contactPatchSchema.parse(request.body);
-    const contact = await prisma.companyContact.update({
-      where: { id },
-      data: deleted
-        ? { isDeleted: true }
-        : {
-            ...clean(input),
-            email: input.email === undefined ? undefined : normalizeEmail(input.email),
-          },
-    });
-    await auditChild(
-      request,
-      auth,
-      deleted ? 'contact.deleted' : 'contact.updated',
-      'contact',
-      id,
-      before,
-      contact,
-    );
-    return deleted ? reply.code(204).send() : { contact };
+    return {
+      phoneNumbers: await prisma.phoneNumber.findMany({
+        where: { organizationId: auth.organizationId, companyId: id, isDeleted: false },
+      }),
+    };
   }
   async function updatePhone(request: FastifyRequest, reply: FastifyReply, deleted: boolean) {
     const auth = await mutationAuth(request, reply);
