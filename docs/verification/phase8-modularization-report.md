@@ -86,7 +86,7 @@
 
 ### Remaining Phase 8 work
 
-- Worker bootstrap/registry split.
+- None.
 
 ## Production Call / Twilio — first increment
 
@@ -127,7 +127,22 @@
 - Production Call/Twilio Phase 8 modularization: complete.
 - Database changes and migrations: none.
 - External Provider/API/real telephone calls: 0.
-- Next split target: Worker bootstrap, job registry and scheduler registration.
+- At this checkpoint, Worker bootstrap/registry was next; it is completed below.
+
+## Worker bootstrap and Job Registry completion
+
+- Implementation commit `641d3de`.
+- Split Prisma, Redis/Queue, Worker registration, scheduler registration, graceful shutdown and
+  main composition under `apps/worker/src/bootstrap`.
+- Replaced conditional processing with a complete Job Registry.
+- Added two focused tests proving known dispatch and payload-free sanitized unknown-Job warnings.
+- Scheduler IDs/upserts, reconnect recovery, retry/history policy, Worker concurrency and graceful
+  shutdown behavior are unchanged.
+- Database changes and migrations: none.
+- GitHub Actions run `30534578152`: install, Prisma generate/format/validate, migration, seed,
+  lint, format, typecheck, 188 tests, E2E 8/8 and all production builds PASS.
+- External Provider/API/real telephone calls: 0.
+- Phase 8 modularization: complete.
 
 ## Mock Call module
 
@@ -141,6 +156,7 @@
 - Local Worker typecheck, focused lint/format and 7 pure state-machine tests: PASS.
 - GitHub Actions run `30524992174`: install, Prisma generate/format/validate, migration, seed,
   lint, format, typecheck, 186 tests, E2E 8/8 and all production builds PASS.
-- Unresolved items: Production Call and Worker bootstrap modularization.
+- At this checkpoint, Production Call and Worker bootstrap modularization remained; both are now
+  complete.
 - External Provider/API/real telephone calls: 0.
-- Next split target: Production Call / Twilio.
+- The next target at this checkpoint was Production Call/Twilio; it is now complete.

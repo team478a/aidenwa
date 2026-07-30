@@ -237,6 +237,16 @@ Final Phase 2 verification:
 - Stage4B Route is now a 75-line composition boundary.
 - Production Call/Twilio modularization is complete with no database or external-call changes.
 
+## Phase 8 — Worker bootstrap completion
+
+- Commit `641d3de` split all Worker bootstrap responsibilities and introduced an explicit Job
+  Registry.
+- Unknown Job monitoring is sanitized and excludes payloads.
+- Existing scheduler recovery and graceful shutdown behavior remain.
+- CI run `30534578152` passed 188 tests, E2E 8/8 and all production builds.
+- Database changes and external Provider/real-call activity: none.
+- Phase 8 modularization is complete.
+
 ## Phase 8 — Production Call first increment
 
 - Commit `a7fb9c5` split Worker dispatch, rollback, expiry, cost, Provider and persistence

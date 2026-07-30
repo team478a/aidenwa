@@ -110,4 +110,13 @@ Controller boundaries:
 `stage4b-routes.ts` is a 75-line registration/composition boundary. Production Call/Twilio
 modularization is complete.
 
-Worker bootstrap remains a later Phase 8 slice.
+### Worker bootstrap
+
+- `create-prisma.ts`: database client construction.
+- `create-redis.ts`: Redis and Queue construction.
+- `register-workers.ts`: explicit Job Registry, Worker listeners and unknown-Job monitoring.
+- `register-schedulers.ts`: idempotent maintenance scheduler registration.
+- `graceful-shutdown.ts`: signal handling and ordered resource cleanup.
+- `main.ts`: validated environment composition.
+
+`apps/worker/src/index.ts` is a two-line entry point. Phase 8 modularization is complete.

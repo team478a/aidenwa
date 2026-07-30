@@ -466,3 +466,17 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions runs `30529663612` and `30530063878` passed the complete pipeline.
 - Production Call/Twilio Phase 8 modularization is complete.
 - Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
+
+## 2026-07-30 — Phase 8 Worker bootstrap and Job Registry completion
+
+- Split Prisma, Redis/Queue, Worker registry, scheduler registration, graceful shutdown and main
+  composition into dedicated bootstrap files.
+- Replaced conditional dispatch with an explicit registry for all supported business and
+  maintenance Job names.
+- Added safe unknown-Job monitoring that records a sanitized name without payload data.
+- Preserved Worker concurrency, maintenance retries/history, scheduler upsert/recovery and
+  graceful shutdown ordering.
+- Added two focused Registry tests.
+- GitHub Actions run `30534578152` passed 188 tests, E2E 8/8 and all production builds.
+- Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
+- Phase 8 modularization implementation is complete.

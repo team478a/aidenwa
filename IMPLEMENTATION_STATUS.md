@@ -1,15 +1,14 @@
 # Implementation Status
 
-- Current stage: Maintainability remediation Phase 8 — incremental modularization in progress
-- Release state: Phase 1–7 and additional fixes 5.1–5.4 verified; Phase 8 modularization in
-  progress; external providers disabled
+- Current stage: Maintainability remediation Phase 8 — modularization complete
+- Release state: Phase 1–8 and additional fixes 5.1–5.4 verified; external providers disabled
 - Updated: 2026-07-30
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 186 tests PASS in CI after Appointment modularization
+  - Unit/API/Worker/Web configuration: 188 tests PASS in CI
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30517677624` PASS for completed Appointment controller grouping
-  - Latest implementation commit: `bdf18c6` (Appointment controller responsibility split)
+  - GitHub Actions: run `30534578152` PASS for completed Worker bootstrap/registry split
+  - Latest implementation commit: `641d3de` (Worker bootstrap and Job Registry split)
   - Latest documentation commit: pending this update
   - External Provider/API/real telephone calls: 0
 
@@ -545,7 +544,26 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Authorization/real-call Controller commit `5eea9b7`; GitHub Actions run `30530063878` PASS.
 - `stage4b-routes.ts` is now a 75-line registration/composition boundary.
 - Production Call/Twilio modularization has no remaining implementation items.
-- Next Phase 8 slice: Worker bootstrap, job registry and scheduler registration split.
+- At this checkpoint, the next slice was Worker bootstrap/registry; it is completed below.
+
+## Phase 8 — Worker bootstrap and Job Registry
+
+- Status: complete.
+- Split Prisma creation, Redis/Queue creation, Worker/handler registration, scheduler
+  registration, graceful shutdown and main composition under `apps/worker/src/bootstrap`.
+- `index.ts` is now a two-line entry point.
+- Replaced conditional Job dispatch with an explicit Job Name Registry covering imports, Mock
+  Call, Production Call, emergency stop, Provider Webhook and all maintenance jobs.
+- Unknown jobs emit only a sanitized Job name; payload data is never logged.
+- Scheduler names, upsert semantics, retries, retained history and reconnect recovery are
+  unchanged.
+- Graceful shutdown still closes Worker, removes the health key, closes Queue/Prisma and
+  disconnects Redis while retaining the first failure.
+- Focused Registry tests: 2 PASS.
+- Implementation commit `641d3de`; GitHub Actions run `30534578152` PASS with 188 tests, E2E 8/8
+  and all production builds.
+- Database schema and migrations: unchanged. External Provider/API/real telephone calls: 0.
+- Phase 8 implementation work: complete.
 
 ## Stage 4A completion audit
 
