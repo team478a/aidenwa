@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Prisma, UserRole, evaluateProductionGate, type PrismaClient } from '@sales-ai/database';
 import {
@@ -11,10 +11,20 @@ import {
   sourceNumberApprovalSchema,
   type ApiEnv,
 } from '@sales-ai/validation';
-import { TwilioVoiceProvider, buildStage4B1Twiml, maskPhone } from '@sales-ai/voice-provider';
+import { buildStage4B1Twiml, maskPhone } from '@sales-ai/voice-provider';
 import { requestMetadata, writeAudit } from './audit.js';
 import { enqueueOutbox } from './outbox.js';
 import type { AuthContext } from './types.js';
+import {
+  activationBlockers,
+  crossedBudgetThresholds,
+  dtmfResult,
+  mapTwilioState,
+} from './modules/production-calls/production-call.policy.js';
+import {
+  productionProviderFromEnv,
+  sourceFingerprint,
+} from './modules/production-calls/provider.js';
 type Deps = {
   prisma: PrismaClient;
   env: ApiEnv;
@@ -654,7 +664,7 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
           ([, v]) => typeof v === 'string',
         ),
       ) as Record<string, string>;
-      const provider = providerFromEnv(env);
+      const provider = productionProviderFromEnv(env);
       const signature = request.headers['x-twilio-signature'];
       const base =
         kind === 'status' ? env.TWILIO_STATUS_CALLBACK_BASE_URL : env.TWILIO_TWIML_BASE_URL;
@@ -792,90 +802,7 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
     };
   }
 }
-function activationBlockers(env: ApiEnv, release: string, written: string) {
-  const b: string[] = [];
-  if (env.NODE_ENV !== 'production') b.push('NODE_ENV');
-  if (env.VOICE_PROVIDER !== 'twilio') b.push('VOICE_PROVIDER');
-  if (!env.PRODUCTION_CALLS_ENABLED) b.push('PRODUCTION_CALLS_ENABLED');
-  if (!env.PRODUCTION_PROVIDER_ALLOWLIST.split(',').includes('twilio'))
-    b.push('PROVIDER_ALLOWLIST');
-  if (env.RELEASE_COMMIT !== release || release !== written) b.push('RELEASE_COMMIT');
-  for (const k of [
-    'TWILIO_ACCOUNT_SID',
-    'TWILIO_API_KEY_SID',
-    'TWILIO_API_KEY_SECRET',
-    'TWILIO_AUTH_TOKEN',
-    'TWILIO_FROM_NUMBER',
-    'TWILIO_STATUS_CALLBACK_BASE_URL',
-    'TWILIO_TWIML_BASE_URL',
-  ] as const)
-    if (!env[k]) b.push(k);
-  return b;
-}
-function providerFromEnv(env: ApiEnv) {
-  if (
-    !env.TWILIO_ACCOUNT_SID ||
-    !env.TWILIO_API_KEY_SID ||
-    !env.TWILIO_API_KEY_SECRET ||
-    !env.TWILIO_AUTH_TOKEN
-  )
-    throw new Error('twilio_credentials_unavailable');
-  return new TwilioVoiceProvider({
-    accountSid: env.TWILIO_ACCOUNT_SID,
-    apiKeySid: env.TWILIO_API_KEY_SID,
-    apiKeySecret: env.TWILIO_API_KEY_SECRET,
-    authToken: env.TWILIO_AUTH_TOKEN,
-    region: env.TWILIO_REGION,
-    edge: env.TWILIO_EDGE,
-    estimatedCostMinorPerMinute: env.TWILIO_ESTIMATED_COST_MINOR_PER_MINUTE,
-    currency: 'JPY',
-  });
-}
-function dtmfResult(v?: string) {
-  return v === '1'
-    ? 'test_audio_ok'
-    : v === '2'
-      ? 'test_audio_issue'
-      : v === '9'
-        ? 'test_stop_requested'
-        : v
-          ? 'test_invalid_input'
-          : 'test_no_input';
-}
-function mapTwilioState(v?: string) {
-  return (
-    (
-      {
-        initiated: 'initiated',
-        ringing: 'ringing',
-        'in-progress': 'in_progress',
-        completed: 'completed',
-        busy: 'busy',
-        'no-answer': 'no_answer',
-        failed: 'failed',
-        canceled: 'canceled',
-      } as Record<
-        string,
-        | 'initiated'
-        | 'ringing'
-        | 'in_progress'
-        | 'completed'
-        | 'busy'
-        | 'no_answer'
-        | 'failed'
-        | 'canceled'
-      >
-    )[v ?? ''] ?? 'provider_unknown'
-  );
-}
-export function crossedBudgetThresholds(before: number, after: number, limit: number) {
-  if (limit <= 0) return ['100_percent'] as const;
-  return [
-    ...(before < limit * 0.8 && after >= limit * 0.8 ? ['80_percent' as const] : []),
-    ...(before < limit * 0.9 && after >= limit * 0.9 ? ['90_percent' as const] : []),
-    ...(before < limit && after >= limit ? ['100_percent' as const] : []),
-  ];
-}
+export { crossedBudgetThresholds };
 async function audit(
   prisma: PrismaClient,
   request: FastifyRequest,
@@ -894,9 +821,6 @@ async function audit(
     afterData,
     ...requestMetadata(request),
   });
-}
-function sourceFingerprint(env: ApiEnv, value: string) {
-  return createHmac('sha256', env.SOURCE_NUMBER_FINGERPRINT_KEY).update(value).digest('hex');
 }
 async function openIncident(
   prisma: PrismaClient,
