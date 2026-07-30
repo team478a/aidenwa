@@ -8,8 +8,8 @@
   - Unit/API/Worker/Web configuration: 186 tests PASS in CI after Appointment modularization
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30516010408` PASS for Appointment Controller/Slot Finder extraction
-  - Latest implementation commit: `2ae9b86` (Appointment Controller/Slot Finder)
+  - GitHub Actions: run `30517677624` PASS for completed Appointment controller grouping
+  - Latest implementation commit: `bdf18c6` (Appointment controller responsibility split)
   - Latest documentation commit: pending this update
   - External Provider/API/real telephone calls: 0
 

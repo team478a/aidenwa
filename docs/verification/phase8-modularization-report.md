@@ -65,6 +65,14 @@
 - Remaining size target: split the 350-line Controller into settings and appointment-operation
   groups; behavior and domain boundaries are already verified.
 
+### Appointment controller grouping
+
+- Implementation commit: `bdf18c6`.
+- Split the Controller into settings (139 lines), appointment operations (186 lines), shared
+  context (44 lines) and composition (14 lines).
+- GitHub Actions run `30517677624`: full CI PASS.
+- Appointment Route/Controller/Slot Finder size-reduction work is complete.
+
 ### Verification
 
 - Focused Import API/Worker/boundary tests: 17 PASS.
@@ -78,6 +86,5 @@
 
 ### Remaining Phase 8 work
 
-- Appointment Controller settings/operations grouping.
 - Mock Call and Production Call domain splits.
 - Worker bootstrap/registry split.

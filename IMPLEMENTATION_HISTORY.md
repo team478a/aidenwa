@@ -404,3 +404,15 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30516010408` passed the full Prisma, migration, seed, static-check, 186-test,
   8-E2E and production-build pipeline.
 - Database schema and external connection behavior were unchanged.
+
+## 2026-07-30 — Phase 8 Appointment controller grouping
+
+- Split the remaining 350-line Controller into a 139-line settings Controller and 186-line
+  appointment-operations Controller.
+- Added a 44-line shared context for authentication, CSRF, audit and scoped Repository
+  dependencies; the integration Controller is now 14 lines.
+- Preserved every existing URL and handler body while meeting the Phase 8 Route/Controller size
+  targets.
+- GitHub Actions run `30517677624` passed Prisma, migration, seed, static checks, 186 tests, E2E
+  8/8 and all production builds.
+- Database schema, external connections and real-call behavior were unchanged.

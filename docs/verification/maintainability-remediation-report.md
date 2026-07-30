@@ -204,3 +204,9 @@ Final Phase 2 verification:
 - CI run `30516010408` passed Prisma/migration/seed, static checks, 186 tests, 8 E2E tests and all
   production builds.
 - Controller grouping remains a size-only follow-up; API and safety behavior are unchanged.
+
+### Appointment controller grouping
+
+- Commit `bdf18c6` split settings and appointment-operation handlers below 200 lines each.
+- Shared authentication, CSRF, audit and Repository dependencies remain centralized.
+- CI run `30517677624` passed the complete pipeline with no API or database changes.
