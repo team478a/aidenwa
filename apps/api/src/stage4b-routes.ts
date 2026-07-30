@@ -3,10 +3,8 @@ import { UserRole, type PrismaClient } from '@sales-ai/database';
 import {
   productionTestAuthorizationSchema,
   providerUnknownResolutionSchema,
-  incidentResolutionSchema,
   realCallRequestSchema,
   reasonSchema,
-  sourceNumberApprovalSchema,
   type ApiEnv,
 } from '@sales-ai/validation';
 import { maskPhone } from '@sales-ai/voice-provider';
@@ -17,13 +15,14 @@ import {
   activationBlockers,
   crossedBudgetThresholds,
 } from './modules/production-calls/production-call.policy.js';
-import { sourceFingerprint } from './modules/production-calls/provider.js';
 import {
   ProductionReservationError,
   reserveProductionCall,
 } from './modules/production-calls/reservation.service.js';
 import { openProductionIncident } from './modules/production-calls/incident.service.js';
 import { createTwilioWebhookHandler } from './modules/production-calls/twilio-webhook.service.js';
+import { registerSourceNumberRoutes } from './modules/production-calls/source-number.controller.js';
+import { registerProductionIncidentRoutes } from './modules/production-calls/incident.controller.js';
 type Deps = {
   prisma: PrismaClient;
   env: ApiEnv;
@@ -42,6 +41,18 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
     if (!auth || !deps.verifyCsrf(request, reply, auth)) return;
     return auth;
   }
+  const controllerDeps = {
+    prisma,
+    env,
+    authorize: (request: FastifyRequest, reply: FastifyReply, roles: readonly UserRole[]) =>
+      deps.authorize(request, reply, roles),
+    system,
+    error: (reply: FastifyReply, code: number, key: string, message: string) =>
+      deps.error(reply, code, key, message),
+    audit,
+  };
+  registerSourceNumberRoutes(app, controllerDeps);
+  registerProductionIncidentRoutes(app, controllerDeps);
   app.get('/api/v1/production-test-authorizations', async (request, reply) => {
     const auth = await deps.authorize(request, reply, [
       UserRole.system_admin,
@@ -55,148 +66,6 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
         orderBy: { createdAt: 'desc' },
       }),
     };
-  });
-  app.get('/api/v1/source-number-approvals', async (request, reply) => {
-    const auth = await deps.authorize(request, reply, [UserRole.system_admin]);
-    if (!auth) return;
-    const rows = await prisma.sourceNumberApproval.findMany({
-      where: { organizationId: auth.organizationId, provider: 'twilio' },
-      orderBy: { createdAt: 'desc' },
-    });
-    return {
-      approvals: rows.map(({ numberFingerprint, ...row }) => {
-        void numberFingerprint;
-        return { ...row, maskedNumber: `********${row.numberLastFour}` };
-      }),
-    };
-  });
-  app.post('/api/v1/source-number-approvals', async (request, reply) => {
-    const auth = await system(request, reply);
-    if (!auth) return;
-    const parsed = sourceNumberApprovalSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    const fingerprint = sourceFingerprint(env, parsed.data.sourceNumberE164);
-    const record = await prisma.sourceNumberApproval.upsert({
-      where: {
-        organizationId_provider_numberFingerprint: {
-          organizationId: auth.organizationId,
-          provider: 'twilio',
-          numberFingerprint: fingerprint,
-        },
-      },
-      create: {
-        organizationId: auth.organizationId,
-        provider: 'twilio',
-        numberFingerprint: fingerprint,
-        numberLastFour: parsed.data.sourceNumberE164.slice(-4),
-        ownershipEvidenceRef: parsed.data.ownershipEvidenceRef,
-        expiresAt: parsed.data.expiresAt,
-        createdBy: auth.userId,
-      },
-      update: {
-        ownershipEvidenceRef: parsed.data.ownershipEvidenceRef,
-        expiresAt: parsed.data.expiresAt,
-        verificationStatus: 'pending',
-        active: false,
-        verifiedBy: null,
-        verifiedAt: null,
-      },
-    });
-    await audit(
-      prisma,
-      request,
-      auth,
-      auth.organizationId,
-      'twilio_source_number.registered',
-      record.id,
-      {
-        maskedNumber: `********${record.numberLastFour}`,
-        evidenceRef: record.ownershipEvidenceRef,
-        expiresAt: record.expiresAt,
-      },
-    );
-    return reply.code(201).send({ approval: { ...record, numberFingerprint: undefined } });
-  });
-  app.post('/api/v1/source-number-approvals/:id/verify', async (request, reply) => {
-    const auth = await system(request, reply);
-    if (!auth) return;
-    const parsed = incidentResolutionSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'REASON_REQUIRED', '確認理由が必要です');
-    const id = (request.params as { id: string }).id;
-    const before = await prisma.sourceNumberApproval.findFirst({
-      where: { id, organizationId: auth.organizationId, expiresAt: { gt: new Date() } },
-    });
-    if (!before)
-      return deps.error(reply, 404, 'SOURCE_NUMBER_NOT_FOUND', '有効な発信元承認がありません');
-    const approval = await prisma.sourceNumberApproval.update({
-      where: { id },
-      data: {
-        verificationStatus: 'verified',
-        active: true,
-        verifiedBy: auth.userId,
-        verifiedAt: new Date(),
-      },
-    });
-    await audit(prisma, request, auth, auth.organizationId, 'twilio_source_number.verified', id, {
-      maskedNumber: `********${approval.numberLastFour}`,
-      reason: parsed.data.reason,
-    });
-    return { approval: { ...approval, numberFingerprint: undefined } };
-  });
-  app.post('/api/v1/source-number-approvals/:id/revoke', async (request, reply) => {
-    const auth = await system(request, reply);
-    if (!auth) return;
-    const parsed = incidentResolutionSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'REASON_REQUIRED', '取消理由が必要です');
-    const id = (request.params as { id: string }).id;
-    const result = await prisma.sourceNumberApproval.updateMany({
-      where: { id, organizationId: auth.organizationId },
-      data: { verificationStatus: 'revoked', active: false },
-    });
-    if (!result.count)
-      return deps.error(reply, 404, 'SOURCE_NUMBER_NOT_FOUND', '発信元承認がありません');
-    await prisma.productionTestAuthorization.updateMany({
-      where: { organizationId: auth.organizationId, sourceNumberApprovalId: id, status: 'active' },
-      data: { status: 'suspended', decisionReason: 'source_number_revoked' },
-    });
-    await audit(prisma, request, auth, auth.organizationId, 'twilio_source_number.revoked', id, {
-      reason: parsed.data.reason,
-    });
-    return { revoked: true };
-  });
-  app.get('/api/v1/production-incidents', async (request, reply) => {
-    const auth = await deps.authorize(request, reply, [
-      UserRole.system_admin,
-      UserRole.admin,
-      UserRole.manager,
-    ]);
-    if (!auth) return;
-    return {
-      incidents: await prisma.productionIncident.findMany({
-        where: { organizationId: auth.organizationId },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      }),
-    };
-  });
-  app.post('/api/v1/production-incidents/:id/resolve', async (request, reply) => {
-    const auth = await system(request, reply);
-    if (!auth) return;
-    const parsed = incidentResolutionSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'REASON_REQUIRED', '解決理由が必要です');
-    const id = (request.params as { id: string }).id;
-    const result = await prisma.productionIncident.updateMany({
-      where: { id, organizationId: auth.organizationId, status: { not: 'resolved' } },
-      data: {
-        status: 'resolved',
-        resolvedBy: auth.userId,
-        resolvedAt: new Date(),
-        resolutionReason: parsed.data.reason,
-      },
-    });
-    if (!result.count)
-      return deps.error(reply, 404, 'INCIDENT_NOT_FOUND', '未解決incidentがありません');
-    return { resolved: true };
   });
   app.post('/api/v1/production-test-authorizations', async (request, reply) => {
     const auth = await system(request, reply);
