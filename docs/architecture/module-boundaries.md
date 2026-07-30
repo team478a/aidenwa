@@ -77,4 +77,19 @@ Worker jobs:
 The former `mock-call.ts` exports remain compatible. Dispatch remains hard-wired to
 `MockVoiceProvider`; no production Provider is reachable through this module.
 
-Production Call and Worker bootstrap remain later Phase 8 slices.
+### Production Calls
+
+Worker:
+
+- `dispatch.service.ts`: final authorization, source-number, rate, destination and Production Gate
+  checks followed by provider dispatch.
+- `rollback.service.ts`: scoped emergency cancellation and authorization expiry.
+- `cost-reconciliation.service.ts`: bounded final-cost lookup and incident creation.
+- `provider.ts`: fail-closed readiness and Twilio Provider construction.
+- `production-call.repository.ts`: rejected-execution persistence and audit.
+- `jobs/production-calls/*`: dispatch, rollback and cost-reconciliation entry points.
+
+API Policy and Provider construction are also under `modules/production-calls`. Authorization,
+reservation and Webhook route-service extraction remains in progress.
+
+Worker bootstrap remains a later Phase 8 slice.

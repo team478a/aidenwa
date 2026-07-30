@@ -86,8 +86,22 @@
 
 ### Remaining Phase 8 work
 
-- Production Call domain split.
+- Production Call API authorization/reservation/Webhook/incident split.
 - Worker bootstrap/registry split.
+
+## Production Call / Twilio — first increment
+
+- Worker implementation commit: `a7fb9c5`; GitHub Actions run `30526940705` PASS.
+- API Policy/Provider implementation commit: `c3132e9`; GitHub Actions run `30527407882` PASS.
+- Split Worker dispatch, rollback, authorization expiry, cost reconciliation, Provider and
+  rejection persistence plus dedicated Job adapters.
+- Extracted API fail-closed activation policy, DTMF/state mapping, budget thresholds, Provider
+  construction and source-number fingerprinting.
+- All API paths, payloads, Serializable reservation transaction, advisory lock, Outbox intent and
+  Provider injection behavior remain unchanged.
+- Database changes and migrations: none.
+- External Provider/API/real telephone calls: 0.
+- Remaining split target: API authorization, reservation, Webhook and incident services.
 
 ## Mock Call module
 

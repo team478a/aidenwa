@@ -220,3 +220,12 @@ Final Phase 2 verification:
 - CI run `30524992174` passed Prisma/migration/seed, static checks, 186 tests, E2E 8/8 and all
   production builds.
 - Database changes and external Provider/real-call activity: none.
+
+## Phase 8 — Production Call first increment
+
+- Commit `a7fb9c5` split Worker dispatch, rollback, expiry, cost, Provider and persistence
+  responsibilities; CI run `30526940705` passed.
+- Commit `c3132e9` extracted API Production Policy and Provider construction; CI run
+  `30527407882` passed.
+- Production Call API authorization/reservation/Webhook route-service extraction remains.
+- Database changes and external Provider/real-call activity: none.

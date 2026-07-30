@@ -428,3 +428,15 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   production builds.
 - Database schema and migrations were unchanged.
 - Made zero external Provider/API calls and zero real telephone calls.
+
+## 2026-07-30 — Phase 8 Production Call Worker and API Policy boundaries
+
+- Split Worker dispatch, rollback/authorization expiry, cost reconciliation, Provider
+  construction and rejection persistence from the former `twilio-call.ts` monolith.
+- Added dedicated dispatch, rollback and cost-reconciliation Worker Job adapters while retaining
+  compatibility exports.
+- Extracted API Production Gate blockers, DTMF/Twilio state mapping, budget threshold calculation,
+  source-number fingerprinting and Provider construction.
+- GitHub Actions runs `30526940705` and `30527407882` passed the complete pipeline.
+- Database schema and migrations were unchanged.
+- Made zero external Provider/API calls and zero real telephone calls.

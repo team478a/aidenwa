@@ -524,6 +524,21 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - External Provider/API calls and real telephone calls: 0.
 - Next Phase 8 slice: Production Call / Twilio service split.
 
+## Phase 8 — Production Call / Twilio modularization
+
+- Status: in progress; Worker service split and API Policy/Provider extraction are complete.
+- Worker dispatch, rollback/authorization expiry, cost reconciliation, Provider creation and
+  persistence boundaries now live under `modules/production-calls`; dedicated Worker Job adapters
+  are registered.
+- API Production Gate blockers, DTMF/state mapping, budget thresholds and Provider construction
+  are independently testable module boundaries.
+- Existing production fail-closed checks, maximum-five-call limit, destination reuse prevention,
+  budget reservation, emergency rollback and injected Fake Provider tests remain unchanged.
+- Worker implementation commit `a7fb9c5`; GitHub Actions run `30526940705` PASS.
+- API policy implementation commit `c3132e9`; GitHub Actions run `30527407882` PASS.
+- Database schema and migrations: unchanged. External Provider calls and real telephone calls: 0.
+- Remaining: API authorization/reservation/Webhook/incident route-service split.
+
 ## Stage 4A completion audit
 
 - 専用UI: 承認作成/申請/判断/停止/再開、Provider設定、利用量/Mock費用、Gate拒否一覧、readinessを実装・build確認済み。
