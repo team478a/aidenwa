@@ -12,8 +12,6 @@ import {
   idParamsSchema,
   optOutCheckSchema,
   optOutInputSchema,
-  phoneInputSchema,
-  phonePatchSchema,
   releaseOptOutSchema,
   salesListInputSchema,
   salesListPatchSchema,
@@ -24,7 +22,8 @@ import { requestMetadata, writeAudit } from './audit.js';
 import { registerCompanyRoutes } from './modules/companies/company.routes.js';
 import { registerContactRoutes } from './modules/contacts/contact.routes.js';
 import { registerImportRoutes } from './modules/imports/import.routes.js';
-import { checkOptOut, findDuplicateCandidates } from './stage2-services.js';
+import { registerPhoneNumberRoutes } from './modules/phone-numbers/phone-number.routes.js';
+import { checkOptOut } from './stage2-services.js';
 import type { AuthContext } from './types.js';
 
 type Deps = {
@@ -76,63 +75,7 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
   });
   registerCompanyRoutes(app, deps);
   registerContactRoutes(app, deps);
-  app.get('/api/v1/companies/:id/phone-numbers', async (request, reply) =>
-    phoneList(request, reply),
-  );
-  app.post('/api/v1/companies/:id/phone-numbers', async (request, reply) => {
-    const auth = await mutationAuth(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    if (!(await getCompany(auth, id)))
-      return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
-    const input = phoneInputSchema.parse(request.body);
-    if (
-      input.contactId &&
-      !(await prisma.companyContact.findFirst({
-        where: {
-          id: input.contactId,
-          companyId: id,
-          organizationId: auth.organizationId,
-          isDeleted: false,
-        },
-      }))
-    )
-      return deps.error(reply, 400, 'INVALID_CONTACT', '担当者が正しくありません');
-    const normalized = normalizePhoneNumber(input.rawNumber);
-    const isCallable = input.type === 'fax' ? false : input.isCallable && normalized.isValid;
-    const phone = await prisma.$transaction(async (tx) => {
-      if (input.isPrimary)
-        await tx.phoneNumber.updateMany({
-          where: { organizationId: auth.organizationId, companyId: id, isDeleted: false },
-          data: { isPrimary: false },
-        });
-      return tx.phoneNumber.create({
-        data: {
-          organizationId: auth.organizationId,
-          companyId: id,
-          ...clean(input),
-          ...normalized,
-          isCallable,
-        },
-      });
-    });
-    await auditChild(request, auth, 'phone.created', 'phone_number', phone.id, undefined, phone);
-    return reply.code(201).send({
-      phoneNumber: phone,
-      duplicateCandidates: await findDuplicateCandidates(
-        prisma,
-        auth.organizationId,
-        { phone: input.rawNumber },
-        id,
-      ),
-    });
-  });
-  app.patch('/api/v1/phone-numbers/:id', async (request, reply) =>
-    updatePhone(request, reply, false),
-  );
-  app.delete('/api/v1/phone-numbers/:id', async (request, reply) =>
-    updatePhone(request, reply, true),
-  );
+  registerPhoneNumberRoutes(app, deps);
 
   app.get('/api/v1/tags', async (request, reply) => {
     const auth = await deps.authenticate(request, reply);
@@ -370,67 +313,6 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
     return { optOut };
   });
 
-  async function phoneList(request: FastifyRequest, reply: FastifyReply) {
-    const auth = await deps.authenticate(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    if (!(await getCompany(auth, id)))
-      return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
-    return {
-      phoneNumbers: await prisma.phoneNumber.findMany({
-        where: { organizationId: auth.organizationId, companyId: id, isDeleted: false },
-      }),
-    };
-  }
-  async function updatePhone(request: FastifyRequest, reply: FastifyReply, deleted: boolean) {
-    const auth = await mutationAuth(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const before = await prisma.phoneNumber.findFirst({
-      where: { id, organizationId: auth.organizationId, isDeleted: false },
-    });
-    if (!before || !(await getCompany(auth, before.companyId)))
-      return deps.error(reply, 404, 'NOT_FOUND', '電話番号が見つかりません');
-    const input = deleted ? {} : phonePatchSchema.parse(request.body);
-    if (
-      input.contactId &&
-      !(await prisma.companyContact.findFirst({
-        where: {
-          id: input.contactId,
-          organizationId: auth.organizationId,
-          companyId: before.companyId,
-          isDeleted: false,
-        },
-      }))
-    )
-      return deps.error(reply, 400, 'INVALID_CONTACT', '担当者が正しくありません');
-    const normalized = input.rawNumber ? normalizePhoneNumber(input.rawNumber) : {};
-    const type = input.type ?? before.type;
-    const isCallable = type === 'fax' ? false : input.isCallable;
-    const phone = await prisma.$transaction(async (tx) => {
-      if (input.isPrimary)
-        await tx.phoneNumber.updateMany({
-          where: { companyId: before.companyId, isDeleted: false },
-          data: { isPrimary: false },
-        });
-      return tx.phoneNumber.update({
-        where: { id },
-        data: deleted
-          ? { isDeleted: true, isPrimary: false }
-          : { ...clean(input), ...normalized, ...(isCallable !== undefined ? { isCallable } : {}) },
-      });
-    });
-    await auditChild(
-      request,
-      auth,
-      deleted ? 'phone.deleted' : 'phone.updated',
-      'phone_number',
-      id,
-      before,
-      phone,
-    );
-    return deleted ? reply.code(204).send() : { phoneNumber: phone };
-  }
   async function createManaged(request: FastifyRequest, reply: FastifyReply, kind: 'tag' | 'list') {
     const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
     if (!auth) return;
