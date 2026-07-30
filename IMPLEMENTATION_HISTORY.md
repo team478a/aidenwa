@@ -453,3 +453,16 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Reduced `stage4b-routes.ts` from 739 to 558 lines in this increment.
 - GitHub Actions runs `30528418820` and `30528857700` passed the complete pipeline.
 - Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
+
+## 2026-07-30 — Phase 8 Production Call API Controller completion
+
+- Moved source-number registration/verification/revocation and incident list/resolution into
+  dedicated Controllers with explicit shared dependencies.
+- Moved limited-test authorization lifecycle/rollback and real-call resolution/reservation/query
+  handlers into dedicated Controllers.
+- Reduced `stage4b-routes.ts` from 558 lines to a 75-line registration/composition boundary.
+- Preserved every URL, role check, CSRF check, organization scope, state transition, audit,
+  rollback transaction and masked response.
+- GitHub Actions runs `30529663612` and `30530063878` passed the complete pipeline.
+- Production Call/Twilio Phase 8 modularization is complete.
+- Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.

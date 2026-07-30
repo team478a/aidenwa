@@ -230,11 +230,19 @@ Final Phase 2 verification:
 - Route size fell from 933 lines before Production Call API extraction to 558 lines.
 - Database changes and external Provider/real-call activity: none.
 
+### Production Call API Controller completion
+
+- Commit `935b37c` split source-number and incident administration; CI run `30529663612` passed.
+- Commit `5eea9b7` split authorization and real-call Controllers; CI run `30530063878` passed.
+- Stage4B Route is now a 75-line composition boundary.
+- Production Call/Twilio modularization is complete with no database or external-call changes.
+
 ## Phase 8 — Production Call first increment
 
 - Commit `a7fb9c5` split Worker dispatch, rollback, expiry, cost, Provider and persistence
   responsibilities; CI run `30526940705` passed.
 - Commit `c3132e9` extracted API Production Policy and Provider construction; CI run
   `30527407882` passed.
-- Production Call API authorization/reservation/Webhook route-service extraction remains.
+- At this checkpoint, Production Call API authorization/reservation/Webhook extraction remained;
+  later increments recorded below completed it.
 - Database changes and external Provider/real-call activity: none.

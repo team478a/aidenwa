@@ -99,6 +99,15 @@ API:
 - `production-call.policy.ts` and `provider.ts`: fail-closed activation, pure mappings and Provider
   construction.
 
-Authorization/source-number/incident administration and real-call query extraction remains.
+Controller boundaries:
+
+- `source-number.controller.ts`: registration, verification and revocation.
+- `incident.controller.ts`: scoped incident listing and resolution.
+- `authorization.controller.ts`: limited-test lifecycle, activation gates and rollback Outbox.
+- `real-call.controller.ts`: provider-unknown resolution, manual reservation and masked queries.
+- `controller.types.ts`: explicit HTTP boundary dependencies.
+
+`stage4b-routes.ts` is a 75-line registration/composition boundary. Production Call/Twilio
+modularization is complete.
 
 Worker bootstrap remains a later Phase 8 slice.

@@ -526,7 +526,7 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 
 ## Phase 8 — Production Call / Twilio modularization
 
-- Status: in progress; Worker service split and API Policy/Provider extraction are complete.
+- Status: complete.
 - Worker dispatch, rollback/authorization expiry, cost reconciliation, Provider creation and
   persistence boundaries now live under `modules/production-calls`; dedicated Worker Job adapters
   are registered.
@@ -541,8 +541,11 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Reservation commit `e1aa0d2`; GitHub Actions run `30528418820` PASS.
 - Webhook/incident commit `84631c1`; GitHub Actions run `30528857700` PASS.
 - `stage4b-routes.ts` reduced from 933 lines before this split to 558 lines.
-- Remaining: API authorization/source-number/incident administration and real-call query
-  route-service split.
+- Source-number/incident Controller commit `935b37c`; GitHub Actions run `30529663612` PASS.
+- Authorization/real-call Controller commit `5eea9b7`; GitHub Actions run `30530063878` PASS.
+- `stage4b-routes.ts` is now a 75-line registration/composition boundary.
+- Production Call/Twilio modularization has no remaining implementation items.
+- Next Phase 8 slice: Worker bootstrap, job registry and scheduler registration split.
 
 ## Stage 4A completion audit
 

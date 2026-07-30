@@ -86,7 +86,6 @@
 
 ### Remaining Phase 8 work
 
-- Production Call API authorization/source-number/incident administration and query split.
 - Worker bootstrap/registry split.
 
 ## Production Call / Twilio — first increment
@@ -101,7 +100,8 @@
   Provider injection behavior remain unchanged.
 - Database changes and migrations: none.
 - External Provider/API/real telephone calls: 0.
-- Remaining split target: API authorization, reservation, Webhook and incident services.
+- At this first checkpoint, API authorization, reservation, Webhook and incident services remained;
+  the following increments completed them.
 
 ### Production Call reservation and Webhook increment
 
@@ -114,8 +114,20 @@
 - `stage4b-routes.ts` is now 558 lines, down from 933 before Production Call API extraction.
 - Database changes and migrations: none.
 - External Provider/API/real telephone calls: 0.
-- Remaining split target: authorization/source-number/incident administration and real-call
-  query handlers.
+- At this checkpoint, authorization/source-number/incident administration and real-call query
+  handlers remained; the following increment completed them.
+
+### Production Call API Controller completion
+
+- Source-number/incident implementation commit `935b37c`; GitHub Actions run `30529663612` PASS.
+- Authorization/real-call implementation commit `5eea9b7`; GitHub Actions run `30530063878` PASS.
+- All remaining administration and query handlers moved to explicit Controller boundaries.
+- `stage4b-routes.ts` reduced to 75 lines while preserving URLs, roles, CSRF, organization scope,
+  state transitions, audit, rollback/Outbox transactions and response masking.
+- Production Call/Twilio Phase 8 modularization: complete.
+- Database changes and migrations: none.
+- External Provider/API/real telephone calls: 0.
+- Next split target: Worker bootstrap, job registry and scheduler registration.
 
 ## Mock Call module
 
