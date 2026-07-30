@@ -33,12 +33,12 @@ type Deps = {
 
 export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
   void app.register(multipart, { limits: { fileSize: deps.env.CSV_MAX_BYTES, files: 1 } });
-  const mutationAuth = async (request: FastifyRequest, reply: FastifyReply) => {
-    const auth = await deps.authorize(request, reply, [
-      UserRole.admin,
-      UserRole.manager,
-      UserRole.sales,
-    ]);
+  const mutationAuth = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    roles: readonly UserRole[] = [UserRole.admin, UserRole.manager, UserRole.sales],
+  ) => {
+    const auth = await deps.authorize(request, reply, roles);
     if (!auth || !deps.verifyCsrf(request, reply, auth)) return;
     return auth;
   };
