@@ -535,3 +535,15 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30587455268` passed Prisma checks, migrations, seed, lint, format,
   typecheck, 195 tests, E2E 8/8 and all production builds.
 - Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
+
+## 2026-07-31 — Phase 9 Step 2 Tags domain
+
+- Split Tags and Company Tag assignments into Route, Controller, Service, Repository and Policy
+  modules.
+- Preserved admin/manager mutation authorization, organization-scoped Company/Tag validation,
+  idempotent assignment, used-tag deletion rejection and audit actions.
+- Reduced `stage2-routes.ts` from 471 to 367 lines.
+- Added focused Policy coverage confirming sales users cannot mutate Tags.
+- GitHub Actions run `30588837534` passed Prisma checks, migrations, seed, lint, format,
+  typecheck, 196 tests, E2E 8/8 and all production builds.
+- Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.

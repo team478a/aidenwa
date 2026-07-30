@@ -39,11 +39,13 @@
   - Contacts CI run: `30554930335` PASS.
   - Phone Numbers implementation commit: `1266ceb`.
   - Phone Numbers CI run: `30587455268` PASS.
-  - Unit/API/Worker/Web configuration: 39 files, 195 tests PASS.
+  - Tags implementation commit: `3b540ba`.
+  - Tags CI run: `30588837534` PASS.
+  - Unit/API/Worker/Web configuration: 40 files, 196 tests PASS.
   - E2E: 8/8 PASS.
-  - `stage2-routes.ts`: 857 to 471 lines.
+  - `stage2-routes.ts`: 857 to 367 lines.
   - Manager organization scope and sales owner scope have focused Policy coverage.
   - API paths, request/response contracts, database schema and Import module were unchanged.
   - Phone audits contain masked numbers only; full raw/normalized numbers are excluded.
-  - Remaining domains: Tags, Sales Lists and OptOuts.
-- Next target: Tags domain modularization.
+  - Remaining domains: Sales Lists and OptOuts.
+- Next target: Sales Lists domain modularization.

@@ -31,7 +31,15 @@ Phone Numbers:
 - `phone-number.repository.ts`: organization-scoped Phone and Contact reads.
 - `phone-number.policy.ts`: FAX/callable and safe audit-projection rules.
 
-The Stage 2 sales-data split is in progress. Tags, Sales Lists and OptOuts remain in
+Tags:
+
+- `tag.routes.ts`: Tag CRUD and Company Tag assignment URL registration.
+- `tag.controller.ts`: admin/manager authorization, scoped responses and audit.
+- `tag.service.ts`: Tag mutations and idempotent Company assignments.
+- `tag.repository.ts`: organization-scoped Tag and assignment reads.
+- `tag.policy.ts`: explicit Tag mutation roles.
+
+The Stage 2 sales-data split is in progress. Sales Lists and OptOuts remain in
 `stage2-routes.ts`; Import remains an independent module.
 
 ### Imports
