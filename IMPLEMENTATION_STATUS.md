@@ -5,13 +5,29 @@
   providers disabled
 - Updated: 2026-07-30
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 188 tests PASS in CI
+  - Unit/API/Worker/Web configuration: 190 tests PASS in CI
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30534578152` PASS for completed Worker bootstrap/registry split
-  - Latest implementation commit: `641d3de` (Worker bootstrap and Job Registry split)
-  - Latest documentation commit: `c123eab` (Phase 8 modularization completion)
+  - GitHub Actions: run `30545217383` PASS for Phase 9 Mock Call formal relocation
+  - Latest implementation commit: `6a7f492` (Mock Call main-process formal relocation)
+  - Latest documentation commit: `c907017` (Phase 9 start)
   - External Provider/API/real telephone calls: 0
+
+## Maintainability remediation Phase 9
+
+- Step 1 — Mock Call main-process formal relocation: COMPLETE
+- `processMockCall` is implemented in
+  `apps/worker/src/modules/mock-calls/mock-call.service.ts`.
+- `apps/worker/src/mock-call.ts` is a compatibility-export boundary only.
+- Mock execution remains hard-wired to `MockVoiceProvider`; production Provider references are
+  prohibited by `mock-call-boundary.test.ts`.
+- Organization scope, emergency stops, limits, FAX/invalid-number rejection, opt-out,
+  idempotency, atomic outcome persistence and Usage Ledger rebuild behavior are unchanged.
+- Database schema and migrations: unchanged.
+- CI run `30545217383`: Prisma generate/format/validate, all migrations, seed, lint, format,
+  typecheck, 190 unit/API tests, E2E 8/8 and production build PASS.
+- External Provider/API/real telephone calls: 0.
+- Next step: Stage 2 sales-data domain modularization; not started.
 
 ## Maintainability remediation Phase 1 (historical checkpoint)
 

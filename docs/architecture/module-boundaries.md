@@ -61,7 +61,8 @@ Controller grouping and Slot Finder extraction are complete.
 
 Worker module:
 
-- `mock-call.service.ts`: stable dispatch service entry point.
+- `mock-call.service.ts`: complete Mock execution orchestration and stable dispatch service entry
+  point.
 - `mock-call.policy.ts`: callable-window, attempt, retry, daily and concurrency limits plus
   deterministic fixture outcomes.
 - `mock-call.repository.ts`: atomic stop transitions and stale reservation recovery.
@@ -74,8 +75,8 @@ Worker jobs:
 - `recovery.job.ts`: stale reservation recovery entry point.
 - `usage-rebuild.job.ts`: scheduled counter reconstruction entry point.
 
-The former `mock-call.ts` exports remain compatible. Dispatch remains hard-wired to
-`MockVoiceProvider`; no production Provider is reachable through this module.
+The former `mock-call.ts` is a compatibility-export boundary only. Dispatch remains hard-wired
+to `MockVoiceProvider`; no production Provider is reachable through this module.
 
 ### Production Calls
 

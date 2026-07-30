@@ -486,3 +486,17 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Confirmed Phase 8 baseline commit `c123eab` and final CI run `30534884941` PASS.
 - Started the remaining domain modularization sequence with Mock Call formal relocation.
 - External Provider feature flags remain disabled; external Provider/API calls and real calls: 0.
+
+## 2026-07-30 — Phase 9 Step 1 Mock Call formal relocation
+
+- Moved the complete `processMockCall` orchestration from the legacy Worker entry point into
+  `modules/mock-calls/mock-call.service.ts`.
+- Reduced `mock-call.ts` to compatibility exports for execution, reservation recovery and Usage
+  Ledger reconstruction.
+- Preserved Provider injection and the `MockVoiceProvider` default without adding any production
+  Provider path.
+- Added focused module-boundary tests that reject production Provider references and execution
+  logic in the legacy entry point.
+- GitHub Actions run `30545217383` passed Prisma generation/format/validation, all migrations,
+  seed, lint, format, typecheck, 190 tests, E2E 8/8 and all production builds.
+- Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
