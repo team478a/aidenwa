@@ -31,7 +31,7 @@ import { registerStage4BRoutes } from './stage4b-routes.js';
 import { registerStage4B2Routes } from './stage4b2-routes.js';
 import { registerStage4B2MediaRoutes } from './stage4b2-media.js';
 import { registerStage4DRoutes } from './stage4d-routes.js';
-import { registerStage4ERoutes } from './stage4e-routes.js';
+import { registerStage4ERoutes } from './modules/appointments/appointment.routes.js';
 import { sendPublicError, toPublicError } from './core/errors/http-error.js';
 
 const SESSION_COOKIE = 'sales_ai_session';
