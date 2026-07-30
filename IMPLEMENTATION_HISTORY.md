@@ -511,3 +511,14 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30546678256` passed Prisma checks, migrations, seed, lint, format,
   typecheck, 192 tests, E2E 8/8 and all production builds.
 - Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
+
+## 2026-07-31 — Phase 9 Step 2 Contacts domain
+
+- Split Contacts into Route, Controller, Service, Repository and Policy modules.
+- Preserved organization scope, sales-owned Company scope, email normalization, soft deletion,
+  CSRF enforcement and existing audit actions/responses.
+- Reduced `stage2-routes.ts` from 654 to 589 lines.
+- Added focused coverage proving Contacts inherit sales ownership and manager organization scope.
+- GitHub Actions run `30554930335` passed Prisma checks, migrations, seed, lint, format,
+  typecheck, 193 tests, E2E 8/8 and all production builds.
+- Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.

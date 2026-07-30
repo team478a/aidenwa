@@ -5,12 +5,12 @@
   providers disabled
 - Updated: 2026-07-30
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 192 tests PASS in CI
+  - Unit/API/Worker/Web configuration: 193 tests PASS in CI
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30546678256` PASS for Phase 9 Stage 2 Companies split
-  - Latest implementation commit: `d7ffa55` (Stage 2 Companies modularization)
-  - Latest documentation commit: `5264345` (Mock Call verification)
+  - GitHub Actions: run `30554930335` PASS for Phase 9 Stage 2 Contacts split
+  - Latest implementation commit: `468449e` (Stage 2 Contacts modularization)
+  - Latest documentation commit: `ed4a8dd` (Companies verification)
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 9
@@ -18,7 +18,8 @@
 - Step 1 — Mock Call main-process formal relocation: COMPLETE
 - Step 2 — Stage 2 sales-data modularization: IN PROGRESS
   - Companies: COMPLETE
-  - Contacts / Phone Numbers / Tags / Sales Lists / OptOuts: pending
+  - Contacts: COMPLETE
+  - Phone Numbers / Tags / Sales Lists / OptOuts: pending
 - `processMockCall` is implemented in
   `apps/worker/src/modules/mock-calls/mock-call.service.ts`.
 - `apps/worker/src/mock-call.ts` is a compatibility-export boundary only.
@@ -31,9 +32,9 @@
   typecheck, 190 unit/API tests, E2E 8/8 and production build PASS.
 - External Provider/API/real telephone calls: 0.
 - Companies routes now use dedicated Route, Controller, Service, Repository and Policy layers.
-- `stage2-routes.ts` was reduced from 857 to 654 lines without URL or payload changes.
-- CI run `30546678256`: 192 unit/API tests, E2E 8/8 and all verification steps PASS.
-- Next domain: Contacts.
+- `stage2-routes.ts` was reduced from 857 to 589 lines without URL or payload changes.
+- CI run `30554930335`: 193 unit/API tests, E2E 8/8 and all verification steps PASS.
+- Next domain: Phone Numbers.
 
 ## Maintainability remediation Phase 1 (historical checkpoint)
 

@@ -35,10 +35,12 @@
 - Stage 2 sales-data domain modularization: IN PROGRESS.
   - Companies implementation commit: `d7ffa55`.
   - Companies CI run: `30546678256` PASS.
-  - Unit/API/Worker/Web configuration: 37 files, 192 tests PASS.
+  - Contacts implementation commit: `468449e`.
+  - Contacts CI run: `30554930335` PASS.
+  - Unit/API/Worker/Web configuration: 38 files, 193 tests PASS.
   - E2E: 8/8 PASS.
-  - `stage2-routes.ts`: 857 to 654 lines.
+  - `stage2-routes.ts`: 857 to 589 lines.
   - Manager organization scope and sales owner scope have focused Policy coverage.
   - API paths, request/response contracts, database schema and Import module were unchanged.
-  - Remaining domains: Contacts, Phone Numbers, Tags, Sales Lists and OptOuts.
-- Next target: Contacts domain modularization.
+  - Remaining domains: Phone Numbers, Tags, Sales Lists and OptOuts.
+- Next target: Phone Numbers domain modularization.

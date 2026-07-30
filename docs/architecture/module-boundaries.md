@@ -15,8 +15,16 @@ Companies:
 - `company.repository.ts`: organization/owner-scoped reads and list filters.
 - `company.policy.ts`: manager/sales visibility and owner-assignment rules.
 
-The Stage 2 sales-data split is in progress. Contacts, Phone Numbers, Tags, Sales Lists and
-OptOuts remain in `stage2-routes.ts`; Import remains an independent module.
+Contacts:
+
+- `contact.routes.ts`: existing Contact URL registration.
+- `contact.controller.ts`: scoped Company access, authentication, CSRF, response and audit.
+- `contact.service.ts`: normalized create, update and soft-delete mutations.
+- `contact.repository.ts`: organization-scoped Contact reads without Role decisions.
+- `contact.policy.ts`: inheritance of Company visibility rules.
+
+The Stage 2 sales-data split is in progress. Phone Numbers, Tags, Sales Lists and OptOuts remain
+in `stage2-routes.ts`; Import remains an independent module.
 
 ### Imports
 
