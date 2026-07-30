@@ -3,9 +3,10 @@ import Redis from 'ioredis';
 import { PrismaClient } from '@sales-ai/database';
 import { workerEnvSchema } from '@sales-ai/validation/env';
 import { dispatchMockCall } from './jobs/mock-calls/dispatch.job.js';
+import { dispatchProductionCall } from './jobs/production-calls/dispatch.job.js';
+import { stopTwilioExecutions } from './jobs/production-calls/rollback.job.js';
 import { processProviderWebhook } from './provider-webhook.js';
 import { processImportJob } from './jobs/imports/index.js';
-import { processTwilioCall, stopTwilioExecutions } from './twilio-call.js';
 import {
   maintenanceJobNames,
   processMaintenanceJob,
@@ -39,7 +40,7 @@ async function processor(job: Job) {
   }
   if (job.name === 'twilio-call') {
     const data = job.data as { executionId: string };
-    await processTwilioCall(prisma, env, data.executionId);
+    await dispatchProductionCall(prisma, env, data.executionId);
     return;
   }
   if (job.name === 'provider-webhook') {
