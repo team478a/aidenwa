@@ -19,3 +19,7 @@ contracts. Imports are the first domain boundary. See `module-boundaries.md`, `a
 Typed domain failures now cross the HTTP boundary through a shared Fastify mapper. Unknown
 infrastructure errors retain internal logging but receive only the stable generic public response;
 domain diagnostic details are never serialized to clients.
+
+Appointment routing, policy, scoped reads, state transitions, Slot Token handling and Worker
+maintenance now live under explicit Appointment domain boundaries. Legacy Stage import paths remain
+compatibility-only exports.

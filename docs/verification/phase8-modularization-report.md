@@ -38,6 +38,23 @@
   implementation commit `08fbd72`.
 - External Provider/API/real telephone calls: 0.
 
+## Appointment module
+
+- API implementation commit: `4f068d5`.
+- Worker implementation commit: `84907d0`.
+- Moved the Stage 4E API under `modules/appointments` with separate Policy, Repository, pure State
+  Machine and Slot Token boundaries.
+- Split Worker maintenance into expiration, notification and cleanup jobs.
+- Existing Appointment API URLs, payloads, responses and HTTP 409 behavior are unchanged.
+- State/Event transactions, optimistic versions, organization scoping and Slot Token checks are
+  unchanged.
+- Database changes and migrations: none.
+- GitHub Actions run `30506818792`: install, Prisma generate/format/validate, migration, seed,
+  lint, format, typecheck, 34 files/186 tests, E2E 8/8 and all production builds PASS.
+- External calendar/Provider/API/real telephone calls: 0.
+- Remaining internal size reduction: extract the Route controller and Slot Finder from the
+  compatibility-preserving Appointment module.
+
 ### Verification
 
 - Focused Import API/Worker/boundary tests: 17 PASS.
@@ -51,5 +68,6 @@
 
 ### Remaining Phase 8 work
 
-- Appointment, Mock Call and Production Call domain splits.
+- Appointment inner controller/Slot Finder extraction.
+- Mock Call and Production Call domain splits.
 - Worker bootstrap/registry split.

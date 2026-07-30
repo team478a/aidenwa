@@ -32,4 +32,25 @@ Routes depend on controller/service/repository/policy. Services may use reposito
 but do not depend on Fastify. Repositories do not decide roles. Worker job adapters validate queue
 payloads before calling the Import engine.
 
-Appointment, Mock Call, Production Call and Worker bootstrap remain later Phase 8 slices.
+### Appointments
+
+API:
+
+- `appointment.routes.ts`: the existing 15 HTTP endpoints and stable response contracts.
+- `appointment.policy.ts`: role/assignee and organization-scope construction.
+- `appointment.repository.ts`: scoped appointment/event/status reads.
+- `appointment.service.ts`: Hold, transition and reschedule transactions.
+- `appointment-state.ts`: pure transition graph and time-bound transition assertions.
+- `slot-token.ts`: signed Slot Token creation and strict verification.
+
+Worker:
+
+- `expiration.job.ts`: atomic held-to-expired transition, Event and notification.
+- `notification.job.ts`: deduplicated upcoming appointment notification.
+- `cleanup.job.ts`: bounded old-event retention cleanup.
+
+The former Stage 4E and Worker `appointment.ts` paths are compatibility exports only. Further
+internal extraction of the Route controller and Slot Finder remains a Phase 8 size-reduction task;
+the domain boundary and safety behavior are already in place.
+
+Mock Call, Production Call and Worker bootstrap remain later Phase 8 slices.

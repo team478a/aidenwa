@@ -3,14 +3,14 @@
 - Current stage: Maintainability remediation Phase 8 — incremental modularization in progress
 - Release state: Phase 1–7 and additional fixes 5.1–5.4 verified; Phase 8 modularization in
   progress; external providers disabled
-- Updated: 2026-07-29
+- Updated: 2026-07-30
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 184 tests PASS locally after shared error mapping
+  - Unit/API/Worker/Web configuration: 186 tests PASS in CI after Appointment modularization
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30427689724` PASS for shared DomainError/HTTP mapping
-  - Latest implementation commit: `08fbd72` (shared DomainError/HTTP mapping)
-  - Latest documentation commit: `cabe43b`
+  - GitHub Actions: run `30506818792` PASS for Appointment API/Worker modularization
+  - Latest implementation commits: `4f068d5` (API), `84907d0` (Worker)
+  - Latest documentation commit: pending this update
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 1 (historical checkpoint)

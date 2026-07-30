@@ -10,3 +10,7 @@ bounded 200-row processing stay in `import-engine.ts`.
 This slice does not change Worker bootstrap, concurrency, retry policy, scheduler registration or
 graceful shutdown. A later Phase 8 slice will introduce the complete handler registry and
 observable unknown-job behavior.
+
+Appointment maintenance delegates to three explicit jobs: atomic hold expiration, deduplicated
+upcoming notification and bounded event cleanup. The existing `maintenance:appointment` scheduler
+name, hourly cadence and public `maintainAppointments` compatibility entry point remain unchanged.

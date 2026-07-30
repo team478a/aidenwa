@@ -186,3 +186,14 @@ Final Phase 2 verification:
   and Web/API/Worker production builds: PASS.
 - Database changes: none.
 - External provider/API calls / real calls: 0.
+
+## Phase 8 — Appointment domain boundary
+
+- Appointment API implementation commit: `4f068d5`; Worker implementation commit: `84907d0`.
+- Moved routing, scoped Repository, role/assignee Policy, state machine and Slot Token handling
+  under the Appointment module while retaining legacy compatibility exports.
+- Split Worker expiration, upcoming-notification and retention-cleanup responsibilities.
+- GitHub Actions run `30506818792`: Prisma/migration/seed, static checks, 186 tests, 8 E2E tests
+  and Web/API/Worker production builds PASS.
+- Database changes: none.
+- External calendar/provider/API calls / real calls: 0.

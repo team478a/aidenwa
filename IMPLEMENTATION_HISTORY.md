@@ -379,3 +379,17 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   tests and Web/API/Worker production builds.
 - Database schema and migrations were unchanged.
 - Made zero real telephone or external Provider/API calls.
+
+## 2026-07-30 — Phase 8 Appointment module boundary
+
+- Moved Appointment routes, service, pure state machine and Slot Token handling under
+  `apps/api/src/modules/appointments`.
+- Added an independently testable organization/assignee Policy and organization-scoped
+  Repository; retained compatibility exports for the former Stage paths.
+- Split Worker maintenance into hold expiration, upcoming notification and event cleanup jobs.
+- Preserved all API URLs, request/response contracts, HTTP 409 behavior, optimistic versioning,
+  Slot Token validation and state/event transaction boundaries.
+- Database schema and migrations were unchanged.
+- GitHub Actions run `30506818792` passed install, Prisma generate/format/validate, migration,
+  seed, lint, format, typecheck, 186 tests, 8 E2E tests and Web/API/Worker builds.
+- Made zero external calendar/Provider/API calls and zero real telephone calls.
