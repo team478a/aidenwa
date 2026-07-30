@@ -15,14 +15,13 @@ import {
   releaseOptOutSchema,
   salesListInputSchema,
   salesListPatchSchema,
-  tagInputSchema,
-  tagPatchSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
 import { registerCompanyRoutes } from './modules/companies/company.routes.js';
 import { registerContactRoutes } from './modules/contacts/contact.routes.js';
 import { registerImportRoutes } from './modules/imports/import.routes.js';
 import { registerPhoneNumberRoutes } from './modules/phone-numbers/phone-number.routes.js';
+import { registerTagRoutes } from './modules/tags/tag.routes.js';
 import { checkOptOut } from './stage2-services.js';
 import type { AuthContext } from './types.js';
 
@@ -76,73 +75,7 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
   registerCompanyRoutes(app, deps);
   registerContactRoutes(app, deps);
   registerPhoneNumberRoutes(app, deps);
-
-  app.get('/api/v1/tags', async (request, reply) => {
-    const auth = await deps.authenticate(request, reply);
-    if (!auth) return;
-    return {
-      tags: await prisma.tag.findMany({
-        where: { organizationId: auth.organizationId },
-        include: { _count: { select: { companyTags: true } } },
-        orderBy: { name: 'asc' },
-      }),
-    };
-  });
-  app.post('/api/v1/tags', async (request, reply) => createManaged(request, reply, 'tag'));
-  app.patch('/api/v1/tags/:id', async (request, reply) =>
-    updateManaged(request, reply, 'tag', false),
-  );
-  app.delete('/api/v1/tags/:id', async (request, reply) =>
-    updateManaged(request, reply, 'tag', true),
-  );
-  app.get('/api/v1/companies/:id/tags', async (request, reply) => {
-    const auth = await deps.authenticate(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    if (!(await getCompany(auth, id)))
-      return deps.error(reply, 404, 'NOT_FOUND', '企業が見つかりません');
-    return {
-      tags: await prisma.companyTag.findMany({ where: { companyId: id }, include: { tag: true } }),
-    };
-  });
-  app.post('/api/v1/companies/:id/tags', async (request, reply) => {
-    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const { id: tagId } = idParamsSchema.parse({
-      id: (request.body as { tagId?: unknown }).tagId,
-    });
-    if (
-      !(await prisma.company.findFirst({
-        where: { id, organizationId: auth.organizationId, isDeleted: false },
-      })) ||
-      !(await prisma.tag.findFirst({ where: { id: tagId, organizationId: auth.organizationId } }))
-    )
-      return deps.error(reply, 404, 'NOT_FOUND', '企業またはタグが見つかりません');
-    const relation = await prisma.companyTag.upsert({
-      where: { companyId_tagId: { companyId: id, tagId } },
-      update: {},
-      create: { companyId: id, tagId, assignedBy: auth.userId },
-    });
-    await auditChild(request, auth, 'company.tag_added', 'company', id, undefined, { tagId });
-    return reply.code(201).send({ companyTag: relation });
-  });
-  app.delete('/api/v1/companies/:id/tags/:tagId', async (request, reply) => {
-    const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
-    if (!auth) return;
-    const { id, tagId } = request.params as { id: string; tagId: string };
-    const company = await prisma.company.findFirst({
-      where: { id, organizationId: auth.organizationId },
-    });
-    const tag = await prisma.tag.findFirst({
-      where: { id: tagId, organizationId: auth.organizationId },
-    });
-    if (!company || !tag)
-      return deps.error(reply, 404, 'NOT_FOUND', '企業またはタグが見つかりません');
-    await prisma.companyTag.deleteMany({ where: { companyId: id, tagId } });
-    await auditChild(request, auth, 'company.tag_removed', 'company', id, { tagId }, undefined);
-    return reply.code(204).send();
-  });
+  registerTagRoutes(app, deps);
 
   app.get('/api/v1/sales-lists', async (request, reply) => {
     const auth = await deps.authenticate(request, reply);
@@ -158,7 +91,7 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
       }),
     };
   });
-  app.post('/api/v1/sales-lists', async (request, reply) => createManaged(request, reply, 'list'));
+  app.post('/api/v1/sales-lists', async (request, reply) => createSalesList(request, reply));
   app.get('/api/v1/sales-lists/:id', async (request, reply) => {
     const auth = await deps.authenticate(request, reply);
     if (!auth) return;
@@ -171,10 +104,10 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
       : deps.error(reply, 404, 'NOT_FOUND', 'リストが見つかりません');
   });
   app.patch('/api/v1/sales-lists/:id', async (request, reply) =>
-    updateManaged(request, reply, 'list', false),
+    updateSalesList(request, reply, false),
   );
   app.delete('/api/v1/sales-lists/:id', async (request, reply) =>
-    updateManaged(request, reply, 'list', true),
+    updateSalesList(request, reply, true),
   );
   app.get('/api/v1/sales-lists/:id/companies', async (request, reply) => {
     const auth = await deps.authenticate(request, reply);
@@ -313,17 +246,9 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
     return { optOut };
   });
 
-  async function createManaged(request: FastifyRequest, reply: FastifyReply, kind: 'tag' | 'list') {
+  async function createSalesList(request: FastifyRequest, reply: FastifyReply) {
     const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
     if (!auth) return;
-    if (kind === 'tag') {
-      const input = tagInputSchema.parse(request.body);
-      const tag = await prisma.tag.create({
-        data: { organizationId: auth.organizationId, ...clean(input) },
-      });
-      await auditChild(request, auth, 'tag.created', 'tag', tag.id, undefined, tag);
-      return reply.code(201).send({ tag });
-    }
     const input = salesListInputSchema.parse(request.body);
     const list = await prisma.salesList.create({
       data: {
@@ -336,39 +261,10 @@ export function registerStage2Routes(app: FastifyInstance, deps: Deps) {
     await auditChild(request, auth, 'sales_list.created', 'sales_list', list.id, undefined, list);
     return reply.code(201).send({ salesList: list });
   }
-  async function updateManaged(
-    request: FastifyRequest,
-    reply: FastifyReply,
-    kind: 'tag' | 'list',
-    deleted: boolean,
-  ) {
+  async function updateSalesList(request: FastifyRequest, reply: FastifyReply, deleted: boolean) {
     const auth = await mutationAuth(request, reply, [UserRole.admin, UserRole.manager]);
     if (!auth) return;
     const { id } = idParamsSchema.parse(request.params);
-    if (kind === 'tag') {
-      const before = await prisma.tag.findFirst({
-        where: { id, organizationId: auth.organizationId },
-      });
-      if (!before) return deps.error(reply, 404, 'NOT_FOUND', 'タグが見つかりません');
-      if (deleted && (await prisma.companyTag.count({ where: { tagId: id } })))
-        return deps.error(reply, 409, 'TAG_IN_USE', '使用中タグは削除できません');
-      const tag = deleted
-        ? await prisma.tag.delete({ where: { id } })
-        : await prisma.tag.update({
-            where: { id },
-            data: clean(tagPatchSchema.parse(request.body)),
-          });
-      await auditChild(
-        request,
-        auth,
-        deleted ? 'tag.deleted' : 'tag.updated',
-        'tag',
-        id,
-        before,
-        deleted ? undefined : tag,
-      );
-      return deleted ? reply.code(204).send() : { tag };
-    }
     const before = await prisma.salesList.findFirst({
       where: { id, organizationId: auth.organizationId, isDeleted: false },
     });
