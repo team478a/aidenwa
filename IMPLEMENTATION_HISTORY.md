@@ -547,3 +547,21 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30588837534` passed Prisma checks, migrations, seed, lint, format,
   typecheck, 196 tests, E2E 8/8 and all production builds.
 - Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
+
+## 2026-07-31 — Phase 9 Step 2 Sales Lists and OptOuts completion
+
+- Split Sales Lists and OptOuts into dedicated Route, Controller, Service, Repository and Policy
+  modules.
+- Preserved Sales List organization scope, admin/manager mutations, sales-owned preview,
+  configured bulk limits, idempotent additions and soft removals.
+- Preserved OptOut Company/Phone/Contact/Channel scope, sales-owned Company restrictions,
+  admin-only reasoned release and existing response contracts.
+- Replaced full OptOut records in audit writes with projections that exclude phone/email
+  snapshots and evidence text.
+- Reduced `stage2-routes.ts` from 367 to a 71-line registration/composition boundary.
+- Corrected the Import adapter to forward its requested Role set; this restored the existing
+  admin/manager-only upload response after the first CI run detected the mismatch.
+- GitHub Actions run `30590755086` passed Prisma checks, all migrations, seed, lint, format,
+  typecheck, 199 tests, E2E 8/8 and all production builds.
+- Stage 2 sales-data modularization is complete.
+- Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.

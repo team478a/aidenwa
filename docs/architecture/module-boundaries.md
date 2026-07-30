@@ -39,8 +39,24 @@ Tags:
 - `tag.repository.ts`: organization-scoped Tag and assignment reads.
 - `tag.policy.ts`: explicit Tag mutation roles.
 
-The Stage 2 sales-data split is in progress. Sales Lists and OptOuts remain in
-`stage2-routes.ts`; Import remains an independent module.
+Sales Lists:
+
+- `sales-list.routes.ts`: existing list, preview and membership URL registration.
+- `sales-list.controller.ts`: scoped HTTP, bulk-limit and audit boundary.
+- `sales-list.service.ts`: list mutations and idempotent membership changes.
+- `sales-list.repository.ts`: organization-scoped list/company reads.
+- `sales-list.policy.ts`: mutation roles and sales-owned preview scope.
+
+OptOuts:
+
+- `opt-out.routes.ts`: list, create, check and release URL registration.
+- `opt-out.controller.ts`: Company ownership, scope validation and safe audit boundary.
+- `opt-out.service.ts`: snapshot persistence, Company status update and reasoned release.
+- `opt-out.repository.ts`: organization-scoped OptOut, Phone and Contact reads.
+- `opt-out.policy.ts`: sales list scope, admin-only release and snapshot-free audit projection.
+
+`stage2-routes.ts` is a 71-line registration/composition boundary. Stage 2 modularization is
+complete; Import remains an independent module.
 
 ### Imports
 

@@ -15,6 +15,7 @@ Fastify route -> controller -> service -> repository
 - Policies are pure and unit-testable.
 - Existing error codes and response shapes remain the compatibility contract.
 
-The Import module is the first complete application of this layering. Shared typed DomainError
-mapping remains the next common-core slice; Import retains the existing error adapter until that
-step is introduced separately.
+This layering now covers Import and all Stage 2 sales-data domains: Companies, Contacts, Phone
+Numbers, Tags, Sales Lists and OptOuts. `stage2-routes.ts` only composes these modules. Shared
+typed DomainError mapping remains a later common-core slice; existing public error adapters are
+retained for compatibility.

@@ -41,11 +41,18 @@
   - Phone Numbers CI run: `30587455268` PASS.
   - Tags implementation commit: `3b540ba`.
   - Tags CI run: `30588837534` PASS.
-  - Unit/API/Worker/Web configuration: 40 files, 196 tests PASS.
+  - Sales Lists and OptOuts implementation commit: `1b00440`.
+  - Import Role compatibility correction: `e239188`.
+  - Final Stage 2 CI run: `30590755086` PASS.
+  - Unit/API/Worker/Web configuration: 42 files, 199 tests PASS.
   - E2E: 8/8 PASS.
-  - `stage2-routes.ts`: 857 to 367 lines.
+  - `stage2-routes.ts`: 857 to 71 lines; registration/composition only.
   - Manager organization scope and sales owner scope have focused Policy coverage.
   - API paths, request/response contracts, database schema and Import module were unchanged.
   - Phone audits contain masked numbers only; full raw/normalized numbers are excluded.
-  - Remaining domains: Sales Lists and OptOuts.
-- Next target: Sales Lists domain modularization.
+  - Sales Lists preserve bulk limits, scoped preview and idempotent membership.
+  - OptOuts preserve Company/Phone/Contact/Channel scope and admin-only reasoned release.
+  - OptOut audit projections exclude raw phone/email snapshots.
+  - Remaining Stage 2 domains: none.
+- Stage 2 sales-data modularization: COMPLETE.
+- Next target: Stage 3 settings/campaign domain modularization; not started.

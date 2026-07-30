@@ -5,23 +5,24 @@
   providers disabled
 - Updated: 2026-07-30
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 196 tests PASS in CI
+  - Unit/API/Worker/Web configuration: 199 tests PASS in CI
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30588837534` PASS for Phase 9 Stage 2 Tags split
-  - Latest implementation commit: `3b540ba` (Stage 2 Tags modularization)
-  - Latest documentation commit: `3e295ac` (Phone Numbers verification)
+  - GitHub Actions: run `30590755086` PASS for completed Phase 9 Stage 2 split
+  - Latest implementation commit: `e239188` (Stage 2 compatibility correction)
+  - Latest documentation commit: `085a51e` (Tags verification)
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 9
 
 - Step 1 — Mock Call main-process formal relocation: COMPLETE
-- Step 2 — Stage 2 sales-data modularization: IN PROGRESS
+- Step 2 — Stage 2 sales-data modularization: COMPLETE
   - Companies: COMPLETE
   - Contacts: COMPLETE
   - Phone Numbers: COMPLETE
   - Tags: COMPLETE
-  - Sales Lists / OptOuts: pending
+  - Sales Lists: COMPLETE
+  - OptOuts: COMPLETE
 - `processMockCall` is implemented in
   `apps/worker/src/modules/mock-calls/mock-call.service.ts`.
 - `apps/worker/src/mock-call.ts` is a compatibility-export boundary only.
@@ -34,10 +35,15 @@
   typecheck, 190 unit/API tests, E2E 8/8 and production build PASS.
 - External Provider/API/real telephone calls: 0.
 - Companies routes now use dedicated Route, Controller, Service, Repository and Policy layers.
-- `stage2-routes.ts` was reduced from 857 to 367 lines without URL or payload changes.
+- `stage2-routes.ts` was reduced from 857 to 71 lines and is now a registration/composition
+  boundary.
 - Phone audit projections now retain only a masked number and non-sensitive state fields.
-- CI run `30588837534`: 196 unit/API tests, E2E 8/8 and all verification steps PASS.
-- Next domain: Sales Lists.
+- Sales Lists preserve admin/manager mutations, sales-owned preview scope, bulk limits and
+  idempotent membership updates.
+- OptOuts preserve Company/Phone/Contact/Channel matching and admin-only reasoned release.
+- OptOut audits exclude phone and email snapshots.
+- CI run `30590755086`: 199 unit/API tests, E2E 8/8 and all verification steps PASS.
+- Next Phase 9 step: Stage 3 settings/campaign domain modularization; not started.
 
 ## Maintainability remediation Phase 1 (historical checkpoint)
 
