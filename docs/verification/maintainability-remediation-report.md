@@ -197,3 +197,10 @@ Final Phase 2 verification:
   and Web/API/Worker production builds PASS.
 - Database changes: none.
 - External calendar/provider/API calls / real calls: 0.
+
+### Appointment inner extraction
+
+- Commit `2ae9b86` reduced the Route to registration only and extracted the Slot Finder.
+- CI run `30516010408` passed Prisma/migration/seed, static checks, 186 tests, 8 E2E tests and all
+  production builds.
+- Controller grouping remains a size-only follow-up; API and safety behavior are unchanged.

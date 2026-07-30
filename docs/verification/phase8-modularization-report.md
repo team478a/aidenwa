@@ -52,8 +52,18 @@
 - GitHub Actions run `30506818792`: install, Prisma generate/format/validate, migration, seed,
   lint, format, typecheck, 34 files/186 tests, E2E 8/8 and all production builds PASS.
 - External calendar/Provider/API/real telephone calls: 0.
-- Remaining internal size reduction: extract the Route controller and Slot Finder from the
-  compatibility-preserving Appointment module.
+- At this initial boundary checkpoint, Route controller and Slot Finder extraction remained; the
+  following increment completed both.
+
+### Appointment inner extraction
+
+- Implementation commit: `2ae9b86`.
+- Route registration reduced from 350 lines to 11 lines.
+- HTTP orchestration moved to an explicit Controller dependency boundary.
+- Slot search moved to a 149-line dedicated Slot Finder.
+- GitHub Actions run `30516010408`: full CI PASS, including 186 tests, E2E 8/8 and all builds.
+- Remaining size target: split the 350-line Controller into settings and appointment-operation
+  groups; behavior and domain boundaries are already verified.
 
 ### Verification
 
@@ -68,6 +78,6 @@
 
 ### Remaining Phase 8 work
 
-- Appointment inner controller/Slot Finder extraction.
+- Appointment Controller settings/operations grouping.
 - Mock Call and Production Call domain splits.
 - Worker bootstrap/registry split.

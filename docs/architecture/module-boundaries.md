@@ -36,12 +36,14 @@ payloads before calling the Import engine.
 
 API:
 
-- `appointment.routes.ts`: the existing 15 HTTP endpoints and stable response contracts.
+- `appointment.routes.ts`: 11-line Fastify registration boundary.
+- `appointment.controller.ts`: the existing 15 HTTP handlers and stable response contracts.
 - `appointment.policy.ts`: role/assignee and organization-scope construction.
 - `appointment.repository.ts`: scoped appointment/event/status reads.
 - `appointment.service.ts`: Hold, transition and reschedule transactions.
 - `appointment-state.ts`: pure transition graph and time-bound transition assertions.
 - `slot-token.ts`: signed Slot Token creation and strict verification.
+- `slot-finder.ts`: timezone-aware bounded availability search and signed slot creation.
 
 Worker:
 
@@ -50,7 +52,7 @@ Worker:
 - `cleanup.job.ts`: bounded old-event retention cleanup.
 
 The former Stage 4E and Worker `appointment.ts` paths are compatibility exports only. Further
-internal extraction of the Route controller and Slot Finder remains a Phase 8 size-reduction task;
-the domain boundary and safety behavior are already in place.
+grouping of the Appointment controller into settings and operations controllers remains a
+size-reduction task; Route and Slot Finder extraction are complete.
 
 Mock Call, Production Call and Worker bootstrap remain later Phase 8 slices.

@@ -393,3 +393,14 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30506818792` passed install, Prisma generate/format/validate, migration,
   seed, lint, format, typecheck, 186 tests, 8 E2E tests and Web/API/Worker builds.
 - Made zero external calendar/Provider/API calls and zero real telephone calls.
+
+## 2026-07-30 — Phase 8 Appointment inner extraction
+
+- Reduced `appointment.routes.ts` from 350 lines to an 11-line registration boundary.
+- Moved HTTP orchestration into `appointment.controller.ts` and made its dependencies explicit in
+  `appointment.types.ts`.
+- Extracted the 149-line Slot Finder from the Appointment transaction Service without changing
+  slot calculation, timezone, availability, conflict or signed-token behavior.
+- GitHub Actions run `30516010408` passed the full Prisma, migration, seed, static-check, 186-test,
+  8-E2E and production-build pipeline.
+- Database schema and external connection behavior were unchanged.
