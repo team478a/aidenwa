@@ -2,7 +2,7 @@ import type { Job, JobsOptions, Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import type { PrismaClient } from '@sales-ai/database';
 import type { WorkerEnv } from '@sales-ai/validation';
-import { maintainAppointments } from './appointment.js';
+import { maintainAppointments } from './jobs/appointments/index.js';
 import { reopenSnoozedFollowups } from './followup.js';
 import { cleanupExpiredHandoffs } from './handoff-cleanup.js';
 import { cleanupExpiredImports } from './import-cleanup.js';
