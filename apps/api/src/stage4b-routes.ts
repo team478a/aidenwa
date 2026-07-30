@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { Prisma, UserRole, evaluateProductionGate, type PrismaClient } from '@sales-ai/database';
+import { Prisma, UserRole, type PrismaClient } from '@sales-ai/database';
 import {
   productionTestAuthorizationSchema,
   providerUnknownResolutionSchema,
@@ -25,6 +25,10 @@ import {
   productionProviderFromEnv,
   sourceFingerprint,
 } from './modules/production-calls/provider.js';
+import {
+  ProductionReservationError,
+  reserveProductionCall,
+} from './modules/production-calls/reservation.service.js';
 type Deps = {
   prisma: PrismaClient;
   env: ApiEnv;
@@ -36,14 +40,6 @@ type Deps = {
   verifyCsrf(request: FastifyRequest, reply: FastifyReply, auth: AuthContext): boolean;
   error(reply: FastifyReply, code: number, key: string, message: string): unknown;
 };
-class ReservationConflict extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
   const { prisma, env } = deps;
   async function system(request: FastifyRequest, reply: FastifyReply) {
@@ -438,142 +434,28 @@ export function registerStage4BRoutes(app: FastifyInstance, deps: Deps) {
     if (!auth) return;
     const parsed = realCallRequestSchema.safeParse(request.body);
     if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    const authorization = await prisma.productionTestAuthorization.findFirst({
-      where: {
-        id: parsed.data.authorizationId,
-        organizationId: auth.organizationId,
-        status: 'active',
-        startsAt: { lte: new Date() },
-        endsAt: { gt: new Date() },
-      },
-    });
-    if (!authorization)
-      return deps.error(reply, 409, 'LIMITED_TEST_INACTIVE', '有効な限定テスト承認がありません');
-    const blockers = activationBlockers(
-      env,
-      authorization.releaseCommit,
-      authorization.writtenApprovalCommit,
-    );
-    if (blockers.length) return deps.error(reply, 409, 'PRODUCTION_DISABLED', blockers.join(','));
-    const allow = await prisma.testCallAllowlist.findFirst({
-      where: {
-        id: parsed.data.allowlistId,
-        organizationId: auth.organizationId,
-        active: true,
-        consentConfirmed: true,
-        expiresAt: { gt: new Date() },
-      },
-    });
-    const phone = await prisma.phoneNumber.findFirst({
-      where: {
-        id: parsed.data.phoneNumberId,
-        organizationId: auth.organizationId,
-        companyId: parsed.data.companyId,
-        isDeleted: false,
-      },
-    });
-    if (!allow || !phone || allow.normalizedPhoneNumber !== phone.normalizedNumber)
-      return deps.error(reply, 409, 'DESTINATION_NOT_ALLOWED', '許可番号と架電先が一致しません');
-    if (!(authorization.approvedAllowlistIds as string[]).includes(allow.id))
-      return deps.error(reply, 409, 'DESTINATION_NOT_APPROVED', '限定承認の対象外です');
-    const gate = await evaluateProductionGate(prisma, {
-      organizationId: auth.organizationId,
-      campaignId: parsed.data.campaignId,
-      companyId: parsed.data.companyId,
-      phoneNumberId: phone.id,
-      provider: 'twilio',
-      region: allow.region,
-    });
-    if (!gate.allowed)
-      return deps.error(reply, 409, 'PRODUCTION_GATE_REJECTED', gate.reasonCodes.join(','));
-    const now = new Date();
-    const dayStart = new Date(now);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const hourStart = new Date(now.getTime() - 3_600_000);
-    const estimate =
-      Math.ceil(authorization.maxCallSeconds / 60) * env.TWILIO_ESTIMATED_COST_MINOR_PER_MINUTE;
-    let execution;
+    let reservation;
     try {
-      execution = await prisma.$transaction(
-        async (tx) => {
-          await tx.$queryRaw(
-            Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.organizationId}, 0))`,
-          );
-          const [used, sameDestination, activeCalls, todayCalls, hourlyCalls, reserved] =
-            await Promise.all([
-              tx.realCallExecution.count({ where: { authorizationId: authorization.id } }),
-              tx.realCallExecution.count({
-                where: { authorizationId: authorization.id, phoneNumberId: phone.id },
-              }),
-              tx.realCallExecution.count({
-                where: {
-                  organizationId: auth.organizationId,
-                  state: { in: ['reserved', 'queued', 'initiated', 'ringing', 'in_progress'] },
-                },
-              }),
-              tx.realCallExecution.count({
-                where: { authorizationId: authorization.id, createdAt: { gte: dayStart } },
-              }),
-              tx.realCallExecution.count({
-                where: { authorizationId: authorization.id, createdAt: { gte: hourStart } },
-              }),
-              tx.realCallExecution.aggregate({
-                where: { authorizationId: authorization.id },
-                _sum: { reservedCostMinor: true },
-              }),
-            ]);
-          if (used >= authorization.maxCalls)
-            throw new ReservationConflict('LIMITED_TEST_LIMIT', '最大5件に到達しています');
-          if (sameDestination)
-            throw new ReservationConflict(
-              'DESTINATION_ALREADY_CALLED',
-              '同じ番号へ再発信できません',
-            );
-          if (activeCalls)
-            throw new ReservationConflict('CONCURRENT_CALL_LIMIT', '同時通話上限は1件です');
-          if (todayCalls >= 5 || hourlyCalls >= 5)
-            throw new ReservationConflict(
-              'REAL_CALL_RATE_LIMIT',
-              '日次または時間上限に到達しています',
-            );
-          if ((reserved._sum.reservedCostMinor ?? 0) + estimate > authorization.budgetLimitMinor)
-            throw new ReservationConflict('BUDGET_LIMIT', '予算上限を超えるため予約できません');
-          const created = await tx.realCallExecution.create({
-            data: {
-              organizationId: auth.organizationId,
-              authorizationId: authorization.id,
-              campaignId: parsed.data.campaignId,
-              companyId: parsed.data.companyId,
-              phoneNumberId: phone.id,
-              allowlistId: allow.id,
-              idempotencyKey: `twilio:${authorization.id}:${phone.id}`,
-              estimatedCostMinor: estimate,
-              reservedCostMinor: estimate,
-              currency: authorization.currency,
-            },
-          });
-          await enqueueOutbox(tx, {
-            organizationId: auth.organizationId,
-            eventType: 'twilio-call',
-            aggregateType: 'real_call_execution',
-            aggregateId: created.id,
-            payload: { executionId: created.id },
-          });
-          return created;
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
+      reservation = await reserveProductionCall(prisma, env, auth.organizationId, parsed.data);
     } catch (cause) {
-      if (cause instanceof ReservationConflict)
+      if (cause instanceof ProductionReservationError)
         return deps.error(reply, 409, cause.code, cause.message);
       throw cause;
     }
-    await audit(prisma, request, auth, auth.organizationId, 'twilio_call.reserved', execution.id, {
-      destination: maskPhone(phone.normalizedNumber),
-      estimatedCostMinor: estimate,
-      currency: authorization.currency,
-    });
-    return reply.code(202).send({ execution: { ...execution, providerCallId: null } });
+    await audit(
+      prisma,
+      request,
+      auth,
+      auth.organizationId,
+      'twilio_call.reserved',
+      reservation.execution.id,
+      {
+        destination: maskPhone(reservation.normalizedPhoneNumber),
+        estimatedCostMinor: reservation.estimatedCostMinor,
+        currency: reservation.currency,
+      },
+    );
+    return reply.code(202).send({ execution: { ...reservation.execution, providerCallId: null } });
   });
   app.get('/api/v1/real-calls', async (request, reply) => {
     const auth = await deps.authorize(request, reply, [
