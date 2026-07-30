@@ -480,3 +480,9 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30534578152` passed 188 tests, E2E 8/8 and all production builds.
 - Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
 - Phase 8 modularization implementation is complete.
+
+## 2026-07-30 — Phase 9 remaining modularization started
+
+- Confirmed Phase 8 baseline commit `c123eab` and final CI run `30534884941` PASS.
+- Started the remaining domain modularization sequence with Mock Call formal relocation.
+- External Provider feature flags remain disabled; external Provider/API calls and real calls: 0.

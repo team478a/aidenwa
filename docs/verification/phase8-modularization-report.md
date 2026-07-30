@@ -144,6 +144,12 @@
 - External Provider/API/real telephone calls: 0.
 - Phase 8 modularization: complete.
 
+## Final Phase 8 baseline
+
+- Final documentation commit: `c123eab`.
+- Final GitHub Actions run: `30534884941` PASS.
+- Phase 9 begins from this verified baseline; Phase 8 entries above remain historical checkpoints.
+
 ## Mock Call module
 
 - Implementation commit: `76c16b1`.
