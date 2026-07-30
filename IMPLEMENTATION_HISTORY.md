@@ -500,3 +500,14 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30545217383` passed Prisma generation/format/validation, all migrations,
   seed, lint, format, typecheck, 190 tests, E2E 8/8 and all production builds.
 - Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
+
+## 2026-07-30 — Phase 9 Step 2 Companies domain
+
+- Split Companies into Route, Controller, Service, Repository and Policy modules.
+- Preserved manager organization-wide access, sales owner scope, owner-assignment restrictions,
+  organization-scoped reads, duplicate candidates and existing API responses.
+- Reduced `stage2-routes.ts` from 857 to 654 lines.
+- Added focused Policy tests for manager/sales scope and sales owner assignment.
+- GitHub Actions run `30546678256` passed Prisma checks, migrations, seed, lint, format,
+  typecheck, 192 tests, E2E 8/8 and all production builds.
+- Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.

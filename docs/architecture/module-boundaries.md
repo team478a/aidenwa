@@ -5,6 +5,19 @@ database models and safety gates remain unchanged.
 
 ## Current modules
 
+### Sales data
+
+Companies:
+
+- `company.routes.ts`: six existing Company URL registrations.
+- `company.controller.ts`: authentication, CSRF, validation, response and audit boundary.
+- `company.service.ts`: create, update and soft-delete mutations without Fastify dependencies.
+- `company.repository.ts`: organization/owner-scoped reads and list filters.
+- `company.policy.ts`: manager/sales visibility and owner-assignment rules.
+
+The Stage 2 sales-data split is in progress. Contacts, Phone Numbers, Tags, Sales Lists and
+OptOuts remain in `stage2-routes.ts`; Import remains an independent module.
+
 ### Imports
 
 API:

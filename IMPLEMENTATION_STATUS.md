@@ -5,17 +5,20 @@
   providers disabled
 - Updated: 2026-07-30
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 190 tests PASS in CI
+  - Unit/API/Worker/Web configuration: 192 tests PASS in CI
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30545217383` PASS for Phase 9 Mock Call formal relocation
-  - Latest implementation commit: `6a7f492` (Mock Call main-process formal relocation)
-  - Latest documentation commit: `c907017` (Phase 9 start)
+  - GitHub Actions: run `30546678256` PASS for Phase 9 Stage 2 Companies split
+  - Latest implementation commit: `d7ffa55` (Stage 2 Companies modularization)
+  - Latest documentation commit: `5264345` (Mock Call verification)
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 9
 
 - Step 1 — Mock Call main-process formal relocation: COMPLETE
+- Step 2 — Stage 2 sales-data modularization: IN PROGRESS
+  - Companies: COMPLETE
+  - Contacts / Phone Numbers / Tags / Sales Lists / OptOuts: pending
 - `processMockCall` is implemented in
   `apps/worker/src/modules/mock-calls/mock-call.service.ts`.
 - `apps/worker/src/mock-call.ts` is a compatibility-export boundary only.
@@ -27,7 +30,10 @@
 - CI run `30545217383`: Prisma generate/format/validate, all migrations, seed, lint, format,
   typecheck, 190 unit/API tests, E2E 8/8 and production build PASS.
 - External Provider/API/real telephone calls: 0.
-- Next step: Stage 2 sales-data domain modularization; not started.
+- Companies routes now use dedicated Route, Controller, Service, Repository and Policy layers.
+- `stage2-routes.ts` was reduced from 857 to 654 lines without URL or payload changes.
+- CI run `30546678256`: 192 unit/API tests, E2E 8/8 and all verification steps PASS.
+- Next domain: Contacts.
 
 ## Maintainability remediation Phase 1 (historical checkpoint)
 

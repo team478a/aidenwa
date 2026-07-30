@@ -32,4 +32,13 @@
   - Default and injected execution contract remains Mock-only.
   - A boundary test prohibits Twilio/production Provider references from Mock Call execution.
   - External Provider/API/real telephone calls: 0.
-- Next target: Stage 2 sales-data domain modularization; not started.
+- Stage 2 sales-data domain modularization: IN PROGRESS.
+  - Companies implementation commit: `d7ffa55`.
+  - Companies CI run: `30546678256` PASS.
+  - Unit/API/Worker/Web configuration: 37 files, 192 tests PASS.
+  - E2E: 8/8 PASS.
+  - `stage2-routes.ts`: 857 to 654 lines.
+  - Manager organization scope and sales owner scope have focused Policy coverage.
+  - API paths, request/response contracts, database schema and Import module were unchanged.
+  - Remaining domains: Contacts, Phone Numbers, Tags, Sales Lists and OptOuts.
+- Next target: Contacts domain modularization.
