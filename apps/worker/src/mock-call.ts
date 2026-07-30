@@ -1,7 +1,11 @@
-import { truncateUtc, type Prisma, type PrismaClient } from '@sales-ai/database';
-import { inCallableWindow } from '@sales-ai/shared';
+import type { PrismaClient } from '@sales-ai/database';
 import { MockVoiceProvider, maskPhone, type MockFixture } from '@sales-ai/voice-provider';
-import { mockCallStopTransition, type MockCallStopReason } from './mock-call-state.js';
+import {
+  applyMockCallStop,
+  recoverStuckReservations,
+} from './modules/mock-calls/mock-call.repository.js';
+import { executionLimitReason, fixtureResult } from './modules/mock-calls/mock-call.policy.js';
+import { rebuildUsageCounters } from './modules/mock-calls/usage-ledger.service.js';
 
 const defaultProvider = new MockVoiceProvider();
 type MockProvider = Pick<MockVoiceProvider, 'createCall'>;
@@ -41,16 +45,16 @@ export async function processMockCall(
     },
   });
   if (emergencyStop) {
-    await applyStop(prisma, job.id, job.target.id, 'emergency_stop_active');
+    await applyMockCallStop(prisma, job.id, job.target.id, 'emergency_stop_active');
     return;
   }
   if (job.campaign.status !== 'running') {
-    await applyStop(prisma, job.id, job.target.id, 'campaign_not_running');
+    await applyMockCallStop(prisma, job.id, job.target.id, 'campaign_not_running');
     return;
   }
   const scheduleReason = await executionLimitReason(prisma, job);
   if (scheduleReason) {
-    await applyStop(prisma, job.id, job.target.id, scheduleReason);
+    await applyMockCallStop(prisma, job.id, job.target.id, scheduleReason);
     return;
   }
   const phone = job.target.phoneNumberId
@@ -84,7 +88,7 @@ export async function processMockCall(
         : phone.type === 'fax'
           ? 'fax'
           : 'not_callable';
-    await applyStop(prisma, job.id, job.target.id, reason);
+    await applyMockCallStop(prisma, job.id, job.target.id, reason);
     return;
   }
   let call: Awaited<ReturnType<MockProvider['createCall']>>;
@@ -95,7 +99,7 @@ export async function processMockCall(
       fixture: job.fixture as MockFixture,
     });
   } catch {
-    await applyStop(prisma, job.id, job.target.id, 'provider_temporary_failure');
+    await applyMockCallStop(prisma, job.id, job.target.id, 'provider_temporary_failure');
     return;
   }
   const attemptNumber = job.attempts.length + 1;
@@ -235,231 +239,4 @@ export async function processMockCall(
   await rebuildUsageCounters(prisma, organizationId);
 }
 
-export async function rebuildUsageCounters(prisma: PrismaClient, organizationId: string) {
-  const [ledgers, previousCalls, previousBudgets, policy] = await Promise.all([
-    prisma.usageLedger.findMany({
-      where: { organizationId },
-      orderBy: { occurredAt: 'asc' },
-    }),
-    prisma.callUsageCounter.findMany({ where: { organizationId } }),
-    prisma.callBudgetCounter.findMany({ where: { organizationId } }),
-    prisma.productionCallPolicy.findUnique({ where: { organizationId } }),
-  ]);
-  const calls = new Map<string, { periodType: string; periodStart: Date; callCount: number }>();
-  const budgets = new Map<
-    string,
-    { periodType: string; periodStart: Date; amountMinor: number; currency: string }
-  >();
-  for (const ledger of ledgers) {
-    for (const periodType of ['hour', 'day'] as const) {
-      const periodStart = truncateUtc(ledger.occurredAt, periodType);
-      const key = `${periodType}:${periodStart.toISOString()}`;
-      const current = calls.get(key);
-      calls.set(key, {
-        periodType,
-        periodStart,
-        callCount: (current?.callCount ?? 0) + ledger.callCount,
-      });
-    }
-    for (const periodType of ['day', 'month'] as const) {
-      const periodStart = truncateUtc(ledger.occurredAt, periodType);
-      const key = `${periodType}:${periodStart.toISOString()}`;
-      const current = budgets.get(key);
-      if (current && current.currency !== ledger.currency)
-        throw new Error('usage_ledger_currency_mismatch');
-      budgets.set(key, {
-        periodType,
-        periodStart,
-        amountMinor: (current?.amountMinor ?? 0) + ledger.amountMinor,
-        currency: ledger.currency,
-      });
-    }
-  }
-  await prisma.$transaction(async (tx) => {
-    await tx.callUsageCounter.deleteMany({ where: { organizationId } });
-    await tx.callBudgetCounter.deleteMany({ where: { organizationId } });
-    if (calls.size)
-      await tx.callUsageCounter.createMany({
-        data: [...calls.values()].map((item) => ({ organizationId, ...item })),
-      });
-    if (budgets.size)
-      await tx.callBudgetCounter.createMany({
-        data: [...budgets.values()].map((item) => ({ organizationId, ...item })),
-      });
-  });
-  if (!policy) return;
-  for (const counter of calls.values()) {
-    const before =
-      previousCalls.find(
-        (item) =>
-          item.periodType === counter.periodType &&
-          item.periodStart.getTime() === counter.periodStart.getTime(),
-      )?.callCount ?? 0;
-    const limit = counter.periodType === 'hour' ? policy.hourlyCallLimit : policy.dailyCallLimit;
-    await recordThreshold(
-      prisma,
-      organizationId,
-      `${counter.periodType}_call`,
-      before,
-      counter.callCount,
-      limit,
-    );
-  }
-  for (const counter of budgets.values()) {
-    const before =
-      previousBudgets.find(
-        (item) =>
-          item.periodType === counter.periodType &&
-          item.periodStart.getTime() === counter.periodStart.getTime(),
-      )?.amountMinor ?? 0;
-    const limit =
-      counter.periodType === 'day' ? policy.dailyBudgetMinor : policy.monthlyBudgetMinor;
-    await recordThreshold(
-      prisma,
-      organizationId,
-      `${counter.periodType}_budget`,
-      before,
-      counter.amountMinor,
-      limit,
-    );
-  }
-}
-
-async function recordThreshold(
-  prisma: PrismaClient,
-  organizationId: string,
-  metric: string,
-  before: number,
-  after: number,
-  limit: number,
-) {
-  if (limit <= 0) return;
-  for (const threshold of [80, 90, 100])
-    if ((before * 100) / limit < threshold && (after * 100) / limit >= threshold)
-      await prisma.auditLog.create({
-        data: {
-          organizationId,
-          action: 'production_limit.threshold_reached',
-          entityType: 'production_call_policy',
-          afterData: {
-            metric,
-            thresholdPercent: threshold,
-            current: after,
-            limit,
-            realCallingEnabled: false,
-          },
-        },
-      });
-}
-
-async function applyStop(
-  prisma: PrismaClient,
-  callJobId: string,
-  targetId: string,
-  reason: MockCallStopReason,
-) {
-  const transition = mockCallStopTransition(reason);
-  await prisma.$transaction([
-    prisma.callJob.update({
-      where: { id: callJobId },
-      data: { status: transition.callJobStatus, errorCode: reason },
-    }),
-    prisma.campaignTarget.update({
-      where: { id: targetId },
-      data: {
-        status: transition.targetStatus,
-        ...(transition.excluded
-          ? { eligibilityStatus: 'excluded', exclusionReason: reason }
-          : { reservedAt: null }),
-      },
-    }),
-  ]);
-}
-
-async function executionLimitReason(
-  prisma: PrismaClient,
-  job: Prisma.CallJobGetPayload<{
-    include: { campaign: true; target: true; attempts: true };
-  }>,
-): Promise<MockCallStopReason | null> {
-  const now = new Date();
-  const weekdays = job.campaign.callableWeekdays as number[];
-  if (
-    !inCallableWindow(
-      now,
-      weekdays,
-      job.campaign.callableStartTime,
-      job.campaign.callableEndTime,
-      job.campaign.timezone,
-    )
-  )
-    return 'outside_callable_window';
-  if (job.target.attemptCount >= job.campaign.maxAttemptsPerTarget) return 'attempt_limit';
-  if (job.target.nextAttemptAt && job.target.nextAttemptAt > now) return 'retry_not_due';
-  const startOfDay = new Date(now);
-  startOfDay.setUTCHours(0, 0, 0, 0);
-  if (
-    (await prisma.callJob.count({
-      where: { campaignId: job.campaignId, status: 'completed', completedAt: { gte: startOfDay } },
-    })) >= job.campaign.dailyCallLimit
-  )
-    return 'daily_limit';
-  if (
-    (await prisma.callJob.count({
-      where: { campaignId: job.campaignId, status: { in: ['dispatching', 'in_progress'] } },
-    })) >= job.campaign.maxConcurrentCalls
-  )
-    return 'concurrency_limit';
-  return null;
-}
-
-export async function recoverStuckReservations(prisma: PrismaClient, before: Date) {
-  const result = await prisma.campaignTarget.updateMany({
-    where: { status: 'reserved', reservedAt: { lt: before } },
-    data: { status: 'pending', reservedAt: null },
-  });
-  return result.count;
-}
-
-function fixtureResult(fixture: MockFixture) {
-  const next = new Date(Date.now() + 86_400_000);
-  if (fixture === 'qualified')
-    return {
-      code: 'qualified',
-      answered: true,
-      qualification: 'qualified',
-      salesStatus: 'qualified' as const,
-      nextActionType: 'follow_up',
-      nextActionAt: next,
-      disablePhone: false,
-    };
-  if (fixture === 'opt_out')
-    return {
-      code: 'opt_out_requested',
-      answered: true,
-      qualification: null,
-      salesStatus: 'opt_out' as const,
-      nextActionType: null,
-      nextActionAt: null,
-      disablePhone: false,
-    };
-  if (fixture === 'invalid_number' || fixture === 'fax_detected')
-    return {
-      code: fixture,
-      answered: false,
-      qualification: null,
-      salesStatus: 'excluded' as const,
-      nextActionType: null,
-      nextActionAt: null,
-      disablePhone: true,
-    };
-  return {
-    code: fixture,
-    answered: fixture === 'answered',
-    qualification: null,
-    salesStatus: 'retry' as const,
-    nextActionType: 'retry',
-    nextActionAt: next,
-    disablePhone: false,
-  };
-}
+export { rebuildUsageCounters, recoverStuckReservations };

@@ -2,7 +2,7 @@ import { Queue, Worker, type Job } from 'bullmq';
 import Redis from 'ioredis';
 import { PrismaClient } from '@sales-ai/database';
 import { workerEnvSchema } from '@sales-ai/validation/env';
-import { processMockCall } from './mock-call.js';
+import { dispatchMockCall } from './jobs/mock-calls/dispatch.job.js';
 import { processProviderWebhook } from './provider-webhook.js';
 import { processImportJob } from './jobs/imports/index.js';
 import { processTwilioCall, stopTwilioExecutions } from './twilio-call.js';
@@ -49,7 +49,7 @@ async function processor(job: Job) {
   }
   if (job.name === 'mock-call') {
     const data = job.data as { callJobId: string; organizationId: string };
-    await processMockCall(prisma, data.callJobId, data.organizationId);
+    await dispatchMockCall(prisma, data.callJobId, data.organizationId);
     return;
   }
   await processImportJob(job, prisma);
