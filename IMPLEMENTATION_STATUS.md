@@ -508,6 +508,22 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - GitHub Actions: run `30407749636` PASS（実Provider接続の承認を意味しない）
 - Stage 4B開始条件: 対象法令、Provider、AI開示、録音/文字起こし同意、発信条件、責任者、限定対象、受入・rollback、書面承認を確定すること
 
+## Phase 8 — Mock Call module boundary
+
+- Status: complete.
+- Split dispatch, stop-state persistence, execution policy, Usage Ledger counter rebuild and
+  reservation recovery into `modules/mock-calls` and `jobs/mock-calls`.
+- Worker dispatch and maintenance now enter through dedicated Job boundaries.
+- CallJob/CampaignTarget atomic stop updates, Usage Ledger uniqueness, completed-job redelivery
+  recovery and Mock Provider-only dispatch are unchanged.
+- Database schema and migrations: unchanged.
+- Local Worker typecheck, focused lint/format and 7 pure state-machine tests: PASS.
+- GitHub Actions run `30524992174`: full pipeline PASS, including 186 tests, E2E 8/8 and
+  production builds.
+- Implementation commit: `76c16b1`.
+- External Provider/API calls and real telephone calls: 0.
+- Next Phase 8 slice: Production Call / Twilio service split.
+
 ## Stage 4A completion audit
 
 - 専用UI: 承認作成/申請/判断/停止/再開、Provider設定、利用量/Mock費用、Gate拒否一覧、readinessを実装・build確認済み。

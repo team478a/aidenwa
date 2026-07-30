@@ -210,3 +210,13 @@ Final Phase 2 verification:
 - Commit `bdf18c6` split settings and appointment-operation handlers below 200 lines each.
 - Shared authentication, CSRF, audit and Repository dependencies remain centralized.
 - CI run `30517677624` passed the complete pipeline with no API or database changes.
+
+## Phase 8 — Mock Call boundary
+
+- Commit `76c16b1` split Mock Call policy, atomic persistence, Usage Ledger reconstruction and
+  Worker Job adapters.
+- Existing queue behavior, Mock Provider restriction and idempotent completed-job recovery remain
+  unchanged.
+- CI run `30524992174` passed Prisma/migration/seed, static checks, 186 tests, E2E 8/8 and all
+  production builds.
+- Database changes and external Provider/real-call activity: none.

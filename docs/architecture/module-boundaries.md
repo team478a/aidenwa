@@ -57,4 +57,24 @@ Worker:
 The former Stage 4E and Worker `appointment.ts` paths are compatibility exports only. Route,
 Controller grouping and Slot Finder extraction are complete.
 
-Mock Call, Production Call and Worker bootstrap remain later Phase 8 slices.
+### Mock Calls
+
+Worker module:
+
+- `mock-call.service.ts`: stable dispatch service entry point.
+- `mock-call.policy.ts`: callable-window, attempt, retry, daily and concurrency limits plus
+  deterministic fixture outcomes.
+- `mock-call.repository.ts`: atomic stop transitions and stale reservation recovery.
+- `mock-call-state.ts`: compatibility boundary for the pure stop-state machine.
+- `usage-ledger.service.ts`: ledger-derived call/budget counters and threshold audits.
+
+Worker jobs:
+
+- `dispatch.job.ts`: queue dispatch entry point.
+- `recovery.job.ts`: stale reservation recovery entry point.
+- `usage-rebuild.job.ts`: scheduled counter reconstruction entry point.
+
+The former `mock-call.ts` exports remain compatible. Dispatch remains hard-wired to
+`MockVoiceProvider`; no production Provider is reachable through this module.
+
+Production Call and Worker bootstrap remain later Phase 8 slices.

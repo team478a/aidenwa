@@ -86,5 +86,21 @@
 
 ### Remaining Phase 8 work
 
-- Mock Call and Production Call domain splits.
+- Production Call domain split.
 - Worker bootstrap/registry split.
+
+## Mock Call module
+
+- Implementation commit: `76c16b1`.
+- Split execution Policy, atomic stop Repository, Usage Ledger rebuild service and dispatch /
+  recovery / rebuild Job adapters.
+- Existing imports and public function signatures remain compatible.
+- CallJob/CampaignTarget atomic updates and Usage Ledger uniqueness are unchanged.
+- Completed-job redelivery still performs counter reconstruction without Provider execution.
+- Database changes and migrations: none.
+- Local Worker typecheck, focused lint/format and 7 pure state-machine tests: PASS.
+- GitHub Actions run `30524992174`: install, Prisma generate/format/validate, migration, seed,
+  lint, format, typecheck, 186 tests, E2E 8/8 and all production builds PASS.
+- Unresolved items: Production Call and Worker bootstrap modularization.
+- External Provider/API/real telephone calls: 0.
+- Next split target: Production Call / Twilio.

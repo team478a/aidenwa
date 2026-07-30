@@ -416,3 +416,15 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30517677624` passed Prisma, migration, seed, static checks, 186 tests, E2E
   8/8 and all production builds.
 - Database schema, external connections and real-call behavior were unchanged.
+
+## 2026-07-30 — Phase 8 Mock Call module boundary
+
+- Extracted Mock Call execution limits and fixture-result policy from the Worker orchestration.
+- Extracted atomic CallJob/CampaignTarget stop persistence and stale-reservation recovery.
+- Extracted Usage Ledger-based call/budget counter reconstruction and threshold audit logging.
+- Added dedicated dispatch, recovery and usage-rebuild Worker Job entry points.
+- Preserved the legacy `mock-call.ts` exports for existing callers and tests.
+- GitHub Actions run `30524992174` passed the full pipeline with 186 tests, E2E 8/8 and all
+  production builds.
+- Database schema and migrations were unchanged.
+- Made zero external Provider/API calls and zero real telephone calls.
