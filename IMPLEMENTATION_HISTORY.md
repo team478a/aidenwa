@@ -659,3 +659,13 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30629304033` passed the new production dependency audit and release safety
   gate, empty-database migrations, lint, format, typecheck, 237 tests, E2E 8/8 and all builds.
 - No schema/migration changes, external Provider/API calls or real telephone calls were made.
+
+## 2026-07-31 — Isolated database backup/restore rehearsal
+
+- Added `pnpm rehearsal:database` for a fail-closed local PostgreSQL rehearsal using fixed,
+  disposable source and restore databases.
+- Automated empty-database migration, seed, `pg_dump`, `pg_restore`, migration-count comparison
+  and cleanup without touching the normal development database.
+- Executed the rehearsal successfully: 17 source migrations and 17 restored migrations; the
+  temporary dump and both disposable databases were removed.
+- External Provider/API calls and real telephone calls: 0.

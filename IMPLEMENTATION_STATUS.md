@@ -723,6 +723,19 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
   requires the written operational approvals and provider activation prerequisites listed in the
   Go/No-Go document.
 
+## Isolated database backup/restore rehearsal
+
+- Status: COMPLETE locally.
+- Added `pnpm rehearsal:database`, which refuses non-local PostgreSQL hosts and operates only on
+  fixed disposable rehearsal database names.
+- Verified an empty database migration through all 17 migrations, development seed, custom-format
+  backup, restore into a second database and completed-migration count equality.
+- Result: source migrations 17, restored migrations 17, external calls 0.
+- Temporary dump and both rehearsal databases are removed in the cleanup path.
+- Remaining release work requiring external action: previous-release startup rehearsal,
+  environment-specific monitoring/backup ownership, operational/legal approvals and separately
+  approved Provider activation.
+
 ## Stage 4A completion audit
 
 - 専用UI: 承認作成/申請/判断/停止/再開、Provider設定、利用量/Mock費用、Gate拒否一覧、readinessを実装・build確認済み。

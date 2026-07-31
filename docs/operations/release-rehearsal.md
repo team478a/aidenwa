@@ -27,6 +27,12 @@ real telephone call. Run it against the exact candidate commit in an isolated en
 11. Stop the candidate, restore the backup into a separate validation database, and start the
     previous release against it. Do not reverse or rewrite migrations.
 
+For the isolated database migration/backup/restore portion on the local Docker stack, set the
+development `DATABASE_URL` and seed passwords, then run `pnpm rehearsal:database`. The command
+refuses non-local database hosts, uses only the fixed `sales_ai_rehearsal_source` and
+`sales_ai_rehearsal_restore` databases, compares completed migration counts after restore and
+removes both databases and its temporary dump when finished.
+
 ## Evidence
 
 Record the commit, operator, timestamps, command results, migration count, E2E count, build result,
