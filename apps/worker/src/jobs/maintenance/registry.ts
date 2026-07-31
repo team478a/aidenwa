@@ -2,16 +2,18 @@ import type { Job, JobsOptions, Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import type { PrismaClient } from '@sales-ai/database';
 import type { WorkerEnv } from '@sales-ai/validation';
-import { maintainAppointments } from '../appointments/index.js';
-import { reopenSnoozedFollowups } from '../../followup.js';
-import { cleanupExpiredHandoffs } from '../../handoff-cleanup.js';
-import { cleanupExpiredImports } from '../../import-cleanup.js';
-import { recoverStuckReservations } from '../mock-calls/recovery.job.js';
-import { rebuildUsageCounters } from '../mock-calls/usage-rebuild.job.js';
-import { reconcileTwilioCosts } from '../production-calls/cost-reconciliation.job.js';
-import { expireTwilioAuthorizations } from '../production-calls/rollback.job.js';
-import { publishOutboxBatch, repairOutboxGaps } from '../../outbox.js';
-import { cleanupRealtimeData } from '../../realtime-cleanup.js';
+import { runAppointmentMaintenanceJob } from './appointment-maintenance.job.js';
+import { runAuthorizationExpiryJob } from './authorization-expiry.job.js';
+import { runCallEventCleanupJob } from './call-event-cleanup.job.js';
+import { runCostReconciliationJob } from './cost-reconciliation.job.js';
+import { runFollowupReopenJob } from './followup-reopen.job.js';
+import { runHandoffCleanupJob } from './handoff-cleanup.job.js';
+import { runHealthJob } from './health.job.js';
+import { runImportCleanupJob } from './import-cleanup.job.js';
+import { runOutboxPublishJob } from './outbox-publish.job.js';
+import { runRealtimeCleanupJob } from './realtime-cleanup.job.js';
+import { runReservationRecoveryJob } from './reservation-recovery.job.js';
+import { runUsageRebuildJob } from './usage-rebuild.job.js';
 
 export const maintenanceJobNames = [
   'maintenance:worker-health',
@@ -124,15 +126,6 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, jobName: s
   }
 }
 
-async function runUsageCounterRebuild(prisma: PrismaClient) {
-  const organizations = await prisma.usageLedger.findMany({
-    distinct: ['organizationId'],
-    select: { organizationId: true },
-  });
-  for (const organization of organizations)
-    await rebuildUsageCounters(prisma, organization.organizationId);
-}
-
 async function executeMaintenance(
   name: MaintenanceJobName,
   prisma: PrismaClient,
@@ -142,57 +135,40 @@ async function executeMaintenance(
 ) {
   switch (name) {
     case 'maintenance:worker-health':
-      await redis.set(
-        env.WORKER_HEALTH_KEY,
-        JSON.stringify({ service: 'worker', status: 'ok', timestamp: new Date().toISOString() }),
-        'EX',
-        15,
-      );
+      await runHealthJob(redis, env);
       return;
     case 'maintenance:import-cleanup':
-      await cleanupExpiredImports(prisma);
+      await runImportCleanupJob(prisma);
       return;
     case 'maintenance:stuck-reservation-recovery':
-      await recoverStuckReservations(
-        prisma,
-        new Date(Date.now() - env.STUCK_RESERVATION_MINUTES * MINUTE),
-      );
+      await runReservationRecoveryJob(prisma, env);
       return;
     case 'maintenance:call-event-cleanup':
-      await prisma.callEvent.deleteMany({
-        where: {
-          eventAt: { lt: new Date(Date.now() - env.CALL_EVENT_RETENTION_DAYS * 24 * HOUR) },
-        },
-      });
+      await runCallEventCleanupJob(prisma, env);
       return;
     case 'maintenance:realtime-cleanup':
-      await cleanupRealtimeData(prisma, {
-        staleBefore: new Date(Date.now() - env.REALTIME_STALE_SESSION_MINUTES * MINUTE),
-        eventBefore: new Date(Date.now() - env.CALL_EVENT_RETENTION_DAYS * 24 * HOUR),
-      });
+      await runRealtimeCleanupJob(prisma, env);
       return;
     case 'maintenance:snoozed-followup-reopen':
-      await reopenSnoozedFollowups(prisma);
+      await runFollowupReopenJob(prisma);
       return;
     case 'maintenance:handoff-cleanup':
-      await cleanupExpiredHandoffs(prisma);
+      await runHandoffCleanupJob(prisma);
       return;
     case 'maintenance:appointment':
-      await maintainAppointments(prisma);
+      await runAppointmentMaintenanceJob(prisma);
       return;
     case 'maintenance:twilio-authorization-expiry':
-      await expireTwilioAuthorizations(prisma);
+      await runAuthorizationExpiryJob(prisma);
       return;
     case 'maintenance:twilio-cost-reconciliation':
-      if (env.VOICE_PROVIDER === 'twilio' && env.PRODUCTION_CALLS_ENABLED)
-        await reconcileTwilioCosts(prisma, env);
+      await runCostReconciliationJob(prisma, env);
       return;
     case 'maintenance:outbox-publish':
-      await repairOutboxGaps(prisma);
-      await publishOutboxBatch(prisma, queue);
+      await runOutboxPublishJob(prisma, queue);
       return;
     case 'maintenance:usage-counter-rebuild':
-      await runUsageCounterRebuild(prisma);
+      await runUsageRebuildJob(prisma);
   }
 }
 
