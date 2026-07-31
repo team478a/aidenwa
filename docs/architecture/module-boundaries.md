@@ -198,6 +198,20 @@ Controller boundaries:
 `stage4b-routes.ts` is a 75-line registration/composition boundary. Production Call/Twilio
 modularization is complete.
 
+### Production Safety
+
+- `approval`: draft/edit/submit and system-admin decision transitions.
+- `policy`: organization Production Call limits and sanitized audit projection.
+- `emergency-stop`: scoped activation, atomic queued-job stopping, Outbox and reasoned release.
+- `allowlist`: consented/expiring test destinations with masked API and audit output.
+- `provider-configuration`: system-admin-only configuration forced to production-disabled.
+- `gate-decision`: Gate evaluation, reason-code persistence and bounded Usage views.
+- `readiness`: fail-closed readiness aggregation.
+- `mock-webhook`: HMAC/time-window validation, deduplication, sanitization and bounded retry queue.
+
+`stage4-routes.ts` is registration/composition only. No module enables an external Provider or real
+telephone call.
+
 ### Worker bootstrap
 
 - `create-prisma.ts`: database client construction.

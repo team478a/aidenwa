@@ -74,4 +74,17 @@
   - External LLM/Provider/API calls and real calls: 0.
 - Scenario validation/simulation and Campaign Target eligibility live in their owning modules;
   `stage3-services.ts` is a compatibility-export boundary only.
-- Next target: Phase 9 Step 4 production-safety modularization.
+- Phase 9 Step 4 Production Safety modularization: implementation COMPLETE.
+  - `stage4-routes.ts`: 704 to 24 lines; registration/composition only.
+  - Readiness, Approval, Policy, Emergency Stop, Allowlist, Provider Configuration, Gate/Usage and
+    Mock Webhook are independently registered modules.
+  - Provider production activation remains fail-closed; real calling remains disabled.
+  - Emergency Stop transaction/Outbox, Gate reason codes and Webhook signature/replay/dedup remain
+    compatible.
+  - Implementation commits: `209730b`, `abfefc3`, `1518a0f`, `3bf1910`, `beeeaca`, `570f870`,
+    `98bdb34`, `98582b0`.
+  - Final CI run `30603452487`: PASS.
+  - Unit/API/Worker/Web configuration: 57 files, 217 tests PASS.
+  - E2E: 8/8 PASS; all production builds PASS.
+  - Database schema/migrations unchanged; external Provider/API/real telephone calls: 0.
+- Next target after final CI PASS: Phase 9 Step 5 Realtime / Media Streams modularization.

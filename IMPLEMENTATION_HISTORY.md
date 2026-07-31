@@ -602,3 +602,15 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30601052065` passed Prisma format/validate/generate, all migrations, seed,
   lint, format, typecheck, 206 tests, E2E 8/8 and all production builds.
 - Database schema and migrations were unchanged; external LLM/Provider/API calls and real calls: 0.
+
+## 2026-07-31 — Phase 9 Step 4 Production Safety
+
+- Split Readiness, Production Approval, Production Call Policy, Emergency Stop, Test Allowlist,
+  Provider Configuration, Production Gate Decision/Usage and Mock Webhook into dedicated modules.
+- Reduced `stage4-routes.ts` from 704 lines to a 24-line registration/composition boundary.
+- Preserved fail-closed Provider configuration, scoped emergency-stop transaction/Outbox,
+  allowlist phone masking, Gate reason codes and Mock Webhook signature/replay/dedup/sanitization.
+- Added focused Policy tests for all eight extracted areas.
+- GitHub Actions run `30603452487` passed Prisma checks, migrations, seed, lint, format,
+  typecheck, 217 tests, E2E 8/8 and all production builds.
+- Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.

@@ -634,6 +634,27 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - External LLM/Provider/API calls and real telephone calls: 0.
 - Next Phase 9 step: Step 4 production-safety modularization. Not started.
 
+## Phase 9 Step 4 — Production Safety modularization
+
+- Status: COMPLETE.
+- Production Approval, Production Call Policy, Emergency Stop, Provider Configuration, Test
+  Allowlist, Production Gate Decision/Usage, Readiness and Mock Webhook now have dedicated module
+  boundaries under `modules/production-safety`.
+- `stage4-routes.ts` was reduced from 704 lines to a 24-line registration/composition boundary.
+- system_admin/organization-admin separation, emergency-stop transaction and scope, Provider
+  fail-closed behavior, allowlist consent/expiry, Gate reason codes, limits and sanitized webhook
+  audit behavior are preserved.
+- Implementation commits: `209730b`, `abfefc3`, `1518a0f`, `3bf1910`, `beeeaca`, `570f870`,
+  `98bdb34`, `98582b0`.
+- Database schema and migrations: unchanged. External Provider/API and real telephone calls: 0.
+- Final CI run `30603452487`: PASS.
+  - Prisma generate / format / validate, all migrations and seed: PASS.
+  - lint / format / typecheck: PASS.
+  - Unit/API/Worker/Web configuration: 57 files, 217 tests PASS.
+  - E2E: 8/8 PASS.
+  - Web/API/Worker production build: PASS.
+- Next Phase 9 step after final PASS: Step 5 Realtime / Media Streams modularization.
+
 ## Stage 4A completion audit
 
 - 専用UI: 承認作成/申請/判断/停止/再開、Provider設定、利用量/Mock費用、Gate拒否一覧、readinessを実装・build確認済み。
