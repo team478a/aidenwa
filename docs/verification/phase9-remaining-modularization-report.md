@@ -55,4 +55,12 @@
   - OptOut audit projections exclude raw phone/email snapshots.
   - Remaining Stage 2 domains: none.
 - Stage 2 sales-data modularization: COMPLETE.
-- Next target: Stage 3 settings/campaign domain modularization; not started.
+- Stage 3 settings/campaign modularization: IN PROGRESS.
+  - Products implementation commit: `b9ec693`.
+  - Products CI run: `30592816681` PASS.
+  - Unit/API/Worker/Web configuration: 43 files, 200 tests PASS.
+  - E2E: 8/8 PASS.
+  - `stage3-routes.ts`: 993 to 918 lines.
+  - Published immutability, version numbering, API contracts and organization scope preserved.
+  - External LLM/Provider/API calls and real calls: 0.
+- Next target: AI Agents domain modularization.

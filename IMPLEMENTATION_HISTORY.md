@@ -565,3 +565,15 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   typecheck, 199 tests, E2E 8/8 and all production builds.
 - Stage 2 sales-data modularization is complete.
 - Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
+
+## 2026-07-31 — Phase 9 Step 3 Products domain
+
+- Split Products into Route, Controller, Service, Repository and Policy modules.
+- Preserved organization scope, admin/manager mutation roles, version numbering, draft-only
+  publishing, archive behavior, audit actions and all response contracts.
+- Replaced the remaining generic Prisma Delegate casts with explicit typed Agent/Scenario/
+  Knowledge branches.
+- Reduced `stage3-routes.ts` from 993 to 918 lines.
+- GitHub Actions run `30592816681` passed Prisma checks, migrations, seed, lint, format,
+  typecheck, 200 tests, E2E 8/8 and all production builds.
+- Database schema and migrations were unchanged; external LLM/Provider calls and real calls: 0.

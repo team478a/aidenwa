@@ -58,6 +58,19 @@ OptOuts:
 `stage2-routes.ts` is a 71-line registration/composition boundary. Stage 2 modularization is
 complete; Import remains an independent module.
 
+### Stage 3 settings and campaigns
+
+Products:
+
+- `product.routes.ts`: existing Product and Product Version URL registration.
+- `product.controller.ts`: authentication, CSRF, validation, response and audit boundary.
+- `product.service.ts`: Product mutation, version creation and draft-only publishing.
+- `product.repository.ts`: organization-scoped Product reads and version numbering.
+- `product.policy.ts`: explicit Product mutation roles.
+
+The Stage 3 split is in progress. AI Agents, Scenarios, Knowledge, Campaigns, Campaign Targets
+and Call Jobs remain in `stage3-routes.ts`.
+
 ### Imports
 
 API:

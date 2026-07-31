@@ -5,12 +5,12 @@
   providers disabled
 - Updated: 2026-07-30
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 199 tests PASS in CI
+  - Unit/API/Worker/Web configuration: 200 tests PASS in CI
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30590755086` PASS for completed Phase 9 Stage 2 split
-  - Latest implementation commit: `e239188` (Stage 2 compatibility correction)
-  - Latest documentation commit: `085a51e` (Tags verification)
+  - GitHub Actions: run `30592816681` PASS for Phase 9 Stage 3 Products split
+  - Latest implementation commit: `b9ec693` (Stage 3 Products modularization)
+  - Latest documentation commit: `463e5e1` (Stage 2 completion)
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 9
@@ -43,7 +43,18 @@
 - OptOuts preserve Company/Phone/Contact/Channel matching and admin-only reasoned release.
 - OptOut audits exclude phone and email snapshots.
 - CI run `30590755086`: 199 unit/API tests, E2E 8/8 and all verification steps PASS.
-- Next Phase 9 step: Stage 3 settings/campaign domain modularization; not started.
+- Phase 9 Step 2 is complete; Step 3 is now in progress.
+
+### Phase 9 Step 3 — Stage 3 settings/campaign modularization
+
+- Status: IN PROGRESS
+- Products: COMPLETE
+- AI Agents / Scenarios / Knowledge / Campaigns / Campaign Targets / Call Jobs: pending
+- Products use dedicated Route, Controller, Service, Repository and Policy layers.
+- Published Product Versions remain immutable and version numbering remains unchanged.
+- `stage3-routes.ts` reduced from 993 to 918 lines.
+- CI run `30592816681`: 200 tests, E2E 8/8 and all verification steps PASS.
+- External LLM/Provider/API calls and real telephone calls: 0.
 
 ## Maintainability remediation Phase 1 (historical checkpoint)
 
