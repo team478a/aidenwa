@@ -2,12 +2,13 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
-import { Prisma, UserRole, evaluateProductionGate, type PrismaClient } from '@sales-ai/database';
-import { gateInputSchema, mockWebhookSchema } from '@sales-ai/validation';
-import { requestMetadata, writeAudit } from './audit.js';
+import { Prisma, UserRole, type PrismaClient } from '@sales-ai/database';
+import { mockWebhookSchema } from '@sales-ai/validation';
+import { writeAudit } from './audit.js';
 import { registerAllowlistRoutes } from './modules/production-safety/allowlist/allowlist.routes.js';
 import { registerApprovalRoutes } from './modules/production-safety/approval/approval.routes.js';
 import { registerEmergencyStopRoutes } from './modules/production-safety/emergency-stop/emergency-stop.routes.js';
+import { registerGateDecisionRoutes } from './modules/production-safety/gate-decision/gate-decision.routes.js';
 import { registerProductionPolicyRoutes } from './modules/production-safety/policy/production-policy.routes.js';
 import { registerProviderConfigurationRoutes } from './modules/production-safety/provider-configuration/provider-configuration.routes.js';
 import { registerReadinessRoutes } from './modules/production-safety/readiness/readiness.routes.js';
@@ -29,33 +30,6 @@ type Deps = {
 
 export function registerStage4Routes(app: FastifyInstance, deps: Deps) {
   const { prisma } = deps;
-  const org = (auth: AuthContext, requested?: string) =>
-    auth.role === UserRole.system_admin && requested ? requested : auth.organizationId;
-  async function mutate(request: FastifyRequest, reply: FastifyReply, roles: UserRole[]) {
-    const auth = await deps.authorize(request, reply, roles);
-    if (!auth || !deps.verifyCsrf(request, reply, auth)) return;
-    return auth;
-  }
-  const audit = (
-    request: FastifyRequest,
-    auth: AuthContext,
-    organizationId: string,
-    action: string,
-    type: string,
-    id: string,
-    afterData?: unknown,
-    beforeData?: unknown,
-  ) =>
-    writeAudit(prisma, {
-      organizationId,
-      userId: auth.userId,
-      action,
-      entityType: type,
-      entityId: id,
-      afterData,
-      beforeData,
-      ...requestMetadata(request),
-    });
 
   registerReadinessRoutes(app, deps);
   registerApprovalRoutes(app, deps);
@@ -63,67 +37,7 @@ export function registerStage4Routes(app: FastifyInstance, deps: Deps) {
   registerEmergencyStopRoutes(app, deps);
   registerAllowlistRoutes(app, deps);
   registerProviderConfigurationRoutes(app, deps);
-  app.post('/api/v1/production-gate/evaluate', async (request, reply) => {
-    const auth = await mutate(request, reply, [
-      UserRole.system_admin,
-      UserRole.admin,
-      UserRole.manager,
-    ]);
-    if (!auth) return;
-    const parsed = gateInputSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    const organizationId = org(auth, parsed.data.organizationId);
-    const decision = await evaluateProductionGate(prisma, { ...parsed.data, organizationId });
-    const record = await prisma.productionGateDecision.create({
-      data: {
-        organizationId,
-        campaignId: parsed.data.campaignId,
-        companyId: parsed.data.companyId,
-        phoneNumberId: parsed.data.phoneNumberId,
-        provider: parsed.data.provider,
-        allowed: decision.allowed,
-        reasonCodes: decision.reasonCodes,
-      },
-    });
-    if (!decision.allowed)
-      await audit(
-        request,
-        auth,
-        organizationId,
-        'production_gate.rejected',
-        'production_gate_decision',
-        record.id,
-        { reasonCodes: decision.reasonCodes, provider: parsed.data.provider },
-      );
-    return { decision: { id: record.id, ...decision } };
-  });
-  app.get('/api/v1/production-usage', async (request, reply) => {
-    const auth = await deps.authorize(request, reply, [
-      UserRole.system_admin,
-      UserRole.admin,
-      UserRole.manager,
-    ]);
-    if (!auth) return;
-    const q = request.query as { organizationId?: string };
-    const organizationId = org(auth, q.organizationId);
-    return {
-      usage: await prisma.callUsageCounter.findMany({
-        where: { organizationId },
-        orderBy: { periodStart: 'desc' },
-        take: 20,
-      }),
-      budgets: await prisma.callBudgetCounter.findMany({
-        where: { organizationId },
-        orderBy: { periodStart: 'desc' },
-        take: 20,
-      }),
-      rejections: await prisma.productionGateDecision.findMany({
-        where: { organizationId, allowed: false },
-        orderBy: { evaluatedAt: 'desc' },
-        take: 50,
-      }),
-    };
-  });
+  registerGateDecisionRoutes(app, deps);
 
   app.post('/api/v1/provider-webhooks/mock', async (request, reply) => {
     const parsed = mockWebhookSchema.safeParse(request.body);
