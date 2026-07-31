@@ -1,16 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Prisma, type PrismaClient, UserRole } from '@sales-ai/database';
-import {
-  campaignSchema,
-  documentSchema,
-  entrySchema,
-  fixtureSchema,
-  idParamsSchema,
-  resourceInputSchema,
-  searchSchema,
-} from '@sales-ai/validation';
+import { campaignSchema, fixtureSchema, idParamsSchema } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
 import { registerAiAgentRoutes } from './modules/ai-agents/ai-agent.routes.js';
+import { registerKnowledgeRoutes } from './modules/knowledge/knowledge.routes.js';
 import { enqueueOutbox } from './outbox.js';
 import { registerProductRoutes } from './modules/products/product.routes.js';
 import { registerScenarioRoutes } from './modules/scenarios/scenario.routes.js';
@@ -62,138 +55,7 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
   registerProductRoutes(app, deps);
   registerAiAgentRoutes(app, deps);
   registerScenarioRoutes(app, deps);
-
-  app.get('/api/v1/knowledge-bases', async (request, reply) => {
-    const auth = await read(request, reply);
-    if (!auth) return;
-    return {
-      knowledgeBases: await prisma.knowledgeBase.findMany({
-        where: { organizationId: auth.organizationId },
-        include: { documents: { include: { entries: true } } },
-        take: 100,
-      }),
-    };
-  });
-  app.post('/api/v1/knowledge-bases', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const input = resourceInputSchema.parse(request.body);
-    const item = await prisma.knowledgeBase.create({
-      data: {
-        organizationId: auth.organizationId,
-        name: input.name,
-        description: input.description ?? '',
-        createdBy: auth.userId,
-      },
-    });
-    await audit(request, auth, 'knowledge_base.created', 'knowledge_base', item.id, {
-      name: item.name,
-    });
-    return reply.code(201).send({ knowledgeBase: item });
-  });
-  app.get('/api/v1/knowledge-bases/:id', async (request, reply) => resourceDetail(request, reply));
-  app.patch('/api/v1/knowledge-bases/:id', async (request, reply) =>
-    updateResource(request, reply, 'knowledge'),
-  );
-  app.post('/api/v1/knowledge-bases/:id/documents', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const input = documentSchema.parse(request.body);
-    if (
-      !(await prisma.knowledgeBase.findFirst({
-        where: { id, organizationId: auth.organizationId },
-      }))
-    )
-      return deps.error(reply, 404, 'NOT_FOUND', 'ナレッジが見つかりません');
-    const document = await prisma.knowledgeDocument.create({
-      data: {
-        organizationId: auth.organizationId,
-        knowledgeBaseId: id,
-        title: input.title,
-        sourceType: input.sourceType,
-        createdBy: auth.userId,
-      },
-    });
-    return reply.code(201).send({ knowledgeDocument: document });
-  });
-  app.post('/api/v1/knowledge-documents/:id/entries', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const input = entrySchema.parse(request.body);
-    const document = await prisma.knowledgeDocument.findFirst({
-      where: { id, organizationId: auth.organizationId, status: 'draft' },
-    });
-    if (!document)
-      return deps.error(reply, 409, 'IMMUTABLE_OR_MISSING', 'draft文書のみ編集できます');
-    const entry = await prisma.knowledgeEntry.create({
-      data: { organizationId: auth.organizationId, knowledgeDocumentId: id, ...input },
-    });
-    return reply.code(201).send({ knowledgeEntry: entry });
-  });
-  app.patch('/api/v1/knowledge-documents/:id', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const input = documentSchema.partial().parse(request.body);
-    const result = await prisma.knowledgeDocument.updateMany({
-      where: { id, organizationId: auth.organizationId, status: 'draft' },
-      data: input,
-    });
-    if (!result.count)
-      return deps.error(reply, 409, 'IMMUTABLE_OR_MISSING', 'draft文書のみ編集できます');
-    return { status: 'updated' };
-  });
-  app.patch('/api/v1/knowledge-entries/:id', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const input = entrySchema.partial().parse(request.body);
-    const entry = await prisma.knowledgeEntry.findFirst({
-      where: { id, organizationId: auth.organizationId, document: { status: 'draft' } },
-    });
-    if (!entry)
-      return deps.error(reply, 409, 'IMMUTABLE_OR_MISSING', 'draft文書の項目のみ編集できます');
-    await prisma.knowledgeEntry.update({ where: { id }, data: input });
-    return { status: 'updated' };
-  });
-  app.post('/api/v1/knowledge-documents/:id/publish', async (request, reply) =>
-    publish(request, reply, 'knowledge'),
-  );
-  app.post('/api/v1/knowledge-bases/:id/search', async (request, reply) => {
-    const auth = await read(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const { query } = searchSchema.parse(request.body);
-    const now = new Date();
-    const entries = await prisma.knowledgeEntry.findMany({
-      where: {
-        organizationId: auth.organizationId,
-        document: { knowledgeBaseId: id, status: 'published' },
-        status: 'active',
-        AND: [
-          { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
-          { OR: [{ validUntil: null }, { validUntil: { gte: now } }] },
-          {
-            OR: [
-              { question: { contains: query, mode: 'insensitive' } },
-              { answer: { contains: query, mode: 'insensitive' } },
-            ],
-          },
-        ],
-      },
-      orderBy: { priority: 'asc' },
-      take: 20,
-    });
-    return {
-      results: entries.map((entry) => ({
-        entryId: entry.id,
-        question: entry.question,
-        answer: entry.answer,
-      })),
-    };
-  });
+  registerKnowledgeRoutes(app, deps);
 
   app.get('/api/v1/campaigns', async (request, reply) => campaignRead(request, reply));
   app.get('/api/v1/campaigns/:id', async (request, reply) => campaignRead(request, reply, true));
@@ -405,56 +267,6 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
     return { status: 'updated' };
   });
 
-  async function updateResource(
-    request: FastifyRequest,
-    reply: FastifyReply,
-    kind: 'knowledge',
-    archive = false,
-  ) {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const input = resourceInputSchema.partial().parse(request.body ?? {});
-    const data = archive
-      ? { status: 'archived' as const, archivedAt: new Date() }
-      : { name: input.name };
-    const result = await prisma.knowledgeBase.updateMany({
-      where: { id, organizationId: auth.organizationId },
-      data,
-    });
-    if (!result.count) return deps.error(reply, 404, 'NOT_FOUND', '対象が見つかりません');
-    await audit(request, auth, `${kind}.${archive ? 'archived' : 'updated'}`, kind, id);
-    return { status: archive ? 'archived' : 'updated' };
-  }
-  async function resourceDetail(request: FastifyRequest, reply: FastifyReply) {
-    const auth = await read(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const item = await prisma.knowledgeBase.findFirst({
-      where: { id, organizationId: auth.organizationId },
-      include: { documents: { include: { entries: true } } },
-    });
-    if (!item) return deps.error(reply, 404, 'NOT_FOUND', '対象が見つかりません');
-    return { item };
-  }
-  async function publish(request: FastifyRequest, reply: FastifyReply, kind: 'knowledge') {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const data = {
-      status: 'published' as const,
-      publishedBy: auth.userId,
-      publishedAt: new Date(),
-    };
-    const result = await prisma.knowledgeDocument.updateMany({
-      where: { id, organizationId: auth.organizationId, status: 'draft' },
-      data,
-    });
-    if (!result.count)
-      return deps.error(reply, 409, 'IMMUTABLE_OR_MISSING', 'draft版のみ公開できます');
-    await audit(request, auth, `${kind}.published`, `${kind}_version`, id);
-    return { status: 'published' };
-  }
   async function campaignReferences(
     org: string,
     input: {
