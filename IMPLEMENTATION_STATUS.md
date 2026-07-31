@@ -3,14 +3,14 @@
 - Current stage: Maintainability remediation Phase 9 — remaining domain modularization in progress
 - Release state: Phase 1–8 and additional fixes 5.1–5.4 verified; Phase 9 in progress; external
   providers disabled
-- Updated: 2026-07-30
+- Updated: 2026-07-31
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 200 tests PASS in CI
+  - Unit/API/Worker/Web configuration: 201 tests PASS in CI
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30592816681` PASS for Phase 9 Stage 3 Products split
-  - Latest implementation commit: `b9ec693` (Stage 3 Products modularization)
-  - Latest documentation commit: `463e5e1` (Stage 2 completion)
+  - GitHub Actions: run `30597838915` PASS for Phase 9 Stage 3 AI Agents split
+  - Latest implementation commit: `0bdc012` (Stage 3 AI Agents modularization)
+  - Latest documentation commit: `e25a4d1` (Stage 3 Products record)
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 9
@@ -49,11 +49,14 @@
 
 - Status: IN PROGRESS
 - Products: COMPLETE
-- AI Agents / Scenarios / Knowledge / Campaigns / Campaign Targets / Call Jobs: pending
-- Products use dedicated Route, Controller, Service, Repository and Policy layers.
+- AI Agents: COMPLETE
+- Scenarios / Knowledge / Campaigns / Campaign Targets / Call Jobs: pending
+- Products and AI Agents use dedicated Route, Controller, Service, Repository and Policy layers.
 - Published Product Versions remain immutable and version numbering remains unchanged.
-- `stage3-routes.ts` reduced from 993 to 918 lines.
-- CI run `30592816681`: 200 tests, E2E 8/8 and all verification steps PASS.
+- AI Agent organization scope, admin/manager mutation roles, CSRF checks, version numbering,
+  draft-only publishing, audit events and response contracts remain unchanged.
+- `stage3-routes.ts` reduced from 993 to 837 lines.
+- CI run `30597838915`: 201 tests, E2E 8/8 and all verification steps PASS.
 - External LLM/Provider/API calls and real telephone calls: 0.
 
 ## Maintainability remediation Phase 1 (historical checkpoint)

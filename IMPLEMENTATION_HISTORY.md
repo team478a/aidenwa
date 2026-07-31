@@ -577,3 +577,15 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30592816681` passed Prisma checks, migrations, seed, lint, format,
   typecheck, 200 tests, E2E 8/8 and all production builds.
 - Database schema and migrations were unchanged; external LLM/Provider calls and real calls: 0.
+
+## 2026-07-31 — Phase 9 Step 3 AI Agents domain
+
+- Split AI Agents into Route, Controller, Service, Repository and Policy modules.
+- Preserved organization-scoped reads, admin/manager mutations, CSRF checks, version numbering,
+  draft-only publishing, archive behavior, audit actions and response contracts.
+- Added focused Policy coverage for AI Agent mutation roles.
+- Removed AI Agent branches from the remaining Stage 3 generic resource helpers and reduced
+  `stage3-routes.ts` from 918 to 837 lines.
+- GitHub Actions run `30597838915` passed Prisma format/validate/generate, migrations, seed,
+  lint, format, typecheck, 201 tests, E2E 8/8 and all production builds.
+- Database schema and migrations were unchanged; external LLM/Provider calls and real calls: 0.

@@ -68,8 +68,16 @@ Products:
 - `product.repository.ts`: organization-scoped Product reads and version numbering.
 - `product.policy.ts`: explicit Product mutation roles.
 
-The Stage 3 split is in progress. AI Agents, Scenarios, Knowledge, Campaigns, Campaign Targets
-and Call Jobs remain in `stage3-routes.ts`.
+AI Agents:
+
+- `ai-agent.routes.ts`: existing AI Agent and version URL registration.
+- `ai-agent.controller.ts`: authentication, CSRF, validation, response and audit boundary.
+- `ai-agent.service.ts`: Agent mutation, version creation and draft-only publishing.
+- `ai-agent.repository.ts`: organization-scoped Agent reads and version numbering.
+- `ai-agent.policy.ts`: explicit AI Agent mutation roles.
+
+The Stage 3 split is in progress. Scenarios, Knowledge, Campaigns, Campaign Targets and Call Jobs
+remain in `stage3-routes.ts`.
 
 ### Imports
 

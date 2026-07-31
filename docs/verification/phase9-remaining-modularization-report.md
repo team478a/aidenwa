@@ -58,9 +58,11 @@
 - Stage 3 settings/campaign modularization: IN PROGRESS.
   - Products implementation commit: `b9ec693`.
   - Products CI run: `30592816681` PASS.
-  - Unit/API/Worker/Web configuration: 43 files, 200 tests PASS.
+  - AI Agents implementation commit: `0bdc012`.
+  - AI Agents CI run: `30597838915` PASS.
+  - Unit/API/Worker/Web configuration: 44 files, 201 tests PASS.
   - E2E: 8/8 PASS.
-  - `stage3-routes.ts`: 993 to 918 lines.
+  - `stage3-routes.ts`: 993 to 837 lines.
   - Published immutability, version numbering, API contracts and organization scope preserved.
   - External LLM/Provider/API calls and real calls: 0.
-- Next target: AI Agents domain modularization.
+- Next target: Scenarios domain modularization.
