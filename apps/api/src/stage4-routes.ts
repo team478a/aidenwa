@@ -3,15 +3,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { Prisma, UserRole, evaluateProductionGate, type PrismaClient } from '@sales-ai/database';
-import { normalizePhoneNumber } from '@sales-ai/shared/stage2';
 import {
-  allowlistSchema,
   gateInputSchema,
   mockWebhookSchema,
   providerConfigSchema,
-  reasonSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
+import { registerAllowlistRoutes } from './modules/production-safety/allowlist/allowlist.routes.js';
 import { registerApprovalRoutes } from './modules/production-safety/approval/approval.routes.js';
 import { registerEmergencyStopRoutes } from './modules/production-safety/emergency-stop/emergency-stop.routes.js';
 import { registerProductionPolicyRoutes } from './modules/production-safety/policy/production-policy.routes.js';
@@ -66,104 +64,7 @@ export function registerStage4Routes(app: FastifyInstance, deps: Deps) {
   registerApprovalRoutes(app, deps);
   registerProductionPolicyRoutes(app, deps);
   registerEmergencyStopRoutes(app, deps);
-
-  app.get('/api/v1/test-call-allowlist', async (request, reply) => {
-    const auth = await deps.authorize(request, reply, [
-      UserRole.system_admin,
-      UserRole.admin,
-      UserRole.manager,
-    ]);
-    if (!auth) return;
-    const q = request.query as { organizationId?: string };
-    const rows = await prisma.testCallAllowlist.findMany({
-      where: { organizationId: org(auth, q.organizationId) },
-      orderBy: { createdAt: 'desc' },
-    });
-    return {
-      allowlist: rows.map(({ normalizedPhoneNumber, ...row }) => ({
-        ...row,
-        maskedPhone: `********${normalizedPhoneNumber.slice(-4)}`,
-      })),
-    };
-  });
-  app.post('/api/v1/test-call-allowlist', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.system_admin, UserRole.admin]);
-    if (!auth) return;
-    const parsed = allowlistSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    const organizationId = org(auth, parsed.data.organizationId);
-    const normalized = normalizePhoneNumber(parsed.data.phoneNumber);
-    if (!normalized.isValid) return deps.error(reply, 400, 'INVALID_PHONE', '電話番号が不正です');
-    const row = await prisma.testCallAllowlist.upsert({
-      where: {
-        organizationId_normalizedPhoneNumber: {
-          organizationId,
-          normalizedPhoneNumber: normalized.normalizedNumber,
-        },
-      },
-      update: {
-        region: parsed.data.region,
-        ownerName: parsed.data.ownerName,
-        purpose: parsed.data.purpose,
-        consentConfirmed: true,
-        expiresAt: parsed.data.expiresAt,
-        active: true,
-        notes: parsed.data.notes,
-      },
-      create: {
-        organizationId,
-        normalizedPhoneNumber: normalized.normalizedNumber,
-        phoneLastFour: normalized.normalizedNumber.slice(-4),
-        region: parsed.data.region,
-        ownerName: parsed.data.ownerName,
-        purpose: parsed.data.purpose,
-        consentConfirmed: true,
-        registeredBy: auth.userId,
-        expiresAt: parsed.data.expiresAt,
-        notes: parsed.data.notes,
-      },
-    });
-    await audit(
-      request,
-      auth,
-      organizationId,
-      'test_allowlist.registered',
-      'test_call_allowlist',
-      row.id,
-      { maskedPhone: `********${row.phoneLastFour}`, region: row.region, expiresAt: row.expiresAt },
-    );
-    return reply.code(201).send({
-      allowlist: {
-        ...row,
-        normalizedPhoneNumber: undefined,
-        maskedPhone: `********${row.phoneLastFour}`,
-      },
-    });
-  });
-  app.post('/api/v1/test-call-allowlist/:id/disable', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.system_admin, UserRole.admin]);
-    if (!auth) return;
-    const parsed = reasonSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'REASON_REQUIRED', '理由が必要です');
-    const id = (request.params as { id: string }).id;
-    const before = await prisma.testCallAllowlist.findFirst({
-      where: { id, organizationId: auth.organizationId },
-    });
-    if (!before) return deps.error(reply, 404, 'NOT_FOUND', '許可番号がありません');
-    const row = await prisma.testCallAllowlist.update({ where: { id }, data: { active: false } });
-    await audit(
-      request,
-      auth,
-      auth.organizationId,
-      'test_allowlist.disabled',
-      'test_call_allowlist',
-      id,
-      { reason: parsed.data.reason, maskedPhone: `********${row.phoneLastFour}` },
-    );
-    return {
-      allowlist: { id: row.id, active: row.active, maskedPhone: `********${row.phoneLastFour}` },
-    };
-  });
+  registerAllowlistRoutes(app, deps);
   app.put('/api/v1/provider-configurations', async (request, reply) => {
     const auth = await mutate(request, reply, [UserRole.system_admin]);
     if (!auth) return;

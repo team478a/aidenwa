@@ -68,6 +68,8 @@ export const allowlistSchema = z.object({
   expiresAt: z.coerce.date(),
   notes: z.string().max(2000).default(''),
 });
+
+export type TestAllowlistInput = z.infer<typeof allowlistSchema>;
 export const providerConfigSchema = z.object({
   organizationId: z.string().uuid().optional(),
   provider: z.string().min(2).max(100),
