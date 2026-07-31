@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@sales-ai/database';
-import { targetEligibility } from '../../stage3-services.js';
+import { targetEligibility } from './campaign-target.eligibility.js';
 import { listSalesListMembers } from './campaign-target.repository.js';
 
 export type TargetPreviewRow = {

@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@sales-ai/database';
 
 import { enqueueOutbox } from '../../outbox.js';
-import { targetEligibility } from '../../stage3-services.js';
+import { targetEligibility } from '../campaign-targets/campaign-target.eligibility.js';
 import { cancellableCallJobStatuses } from './call-job.policy.js';
 
 export async function queueMockCall(
