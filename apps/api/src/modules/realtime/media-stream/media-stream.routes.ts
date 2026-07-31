@@ -15,6 +15,7 @@ import {
 import { requestMetadata, writeAudit } from '../../../audit.js';
 import { buildPersistedRealtimePrompt } from '../realtime-simulation/realtime-simulation.service.js';
 import { realtimeActivationBlockers } from './media-stream.policy.js';
+import { finishMediaSession, loadMediaGateContext } from './media-stream.repository.js';
 import { realtimeRawDataText, sanitizeRealtimeCode } from '../protocol/realtime-protocol.js';
 import { verifyMediaSessionToken } from '../token/realtime-token.policy.js';
 import { validateTwilioMediaSignature } from '../token/realtime-token.policy.js';
@@ -46,7 +47,7 @@ export function registerStage4B2MediaRoutes(
     const tokenSecret = env.REALTIME_SESSION_TOKEN_SECRET;
     const mediaBaseUrl = env.TWILIO_MEDIA_STREAM_BASE_URL;
     if (!tokenSecret || !mediaBaseUrl) return reply.code(409).send();
-    const context = await loadGateContext(prisma, executionId);
+    const context = await loadMediaGateContext(prisma, executionId);
     if (!context) return reply.code(404).send();
     const gate = await evaluateProductionGate(prisma, context.gateInput);
     if (!gate.allowed) return reply.code(409).send({ error: { code: 'PRODUCTION_GATE_REJECTED' } });
@@ -112,7 +113,7 @@ export function registerStage4B2MediaRoutes(
           where: { id: sessionId, status: 'reserved' },
         });
         if (!session?.executionId) return reply.code(404).send();
-        const context = await loadGateContext(prisma, session.executionId);
+        const context = await loadMediaGateContext(prisma, session.executionId);
         if (!context || context.execution.organizationId !== session.organizationId)
           return reply.code(403).send();
         const gate = await evaluateProductionGate(prisma, context.gateInput);
@@ -141,7 +142,7 @@ export function registerStage4B2MediaRoutes(
         where: { id: sessionId, status: 'reserved' },
       });
       if (!session?.executionId) return fail('session_invalid');
-      const context = await loadGateContext(prisma, session.executionId);
+      const context = await loadMediaGateContext(prisma, session.executionId);
       if (!context || context.execution.organizationId !== session.organizationId)
         return fail('scope_invalid');
       const gate = await evaluateProductionGate(prisma, context.gateInput);
@@ -182,7 +183,7 @@ export function registerStage4B2MediaRoutes(
       const end = async (reason: string) => {
         if (finalReason) return;
         finalReason = reason;
-        await finishSession(prisma, session.id, reason);
+        await finishMediaSession(prisma, session.id, reason);
         await audit(prisma, request, session.organizationId, session.id, 'realtime.session.ended');
         await bridge?.close(reason);
       };
@@ -272,23 +273,6 @@ export function registerStage4B2MediaRoutes(
   );
 }
 
-async function loadGateContext(prisma: PrismaClient, executionId: string) {
-  const execution = await prisma.realCallExecution.findUnique({ where: { id: executionId } });
-  if (!execution || !['initiated', 'ringing', 'in_progress'].includes(execution.state)) return;
-  const allow = await prisma.testCallAllowlist.findUnique({ where: { id: execution.allowlistId } });
-  if (!allow) return;
-  return {
-    execution,
-    gateInput: {
-      organizationId: execution.organizationId,
-      campaignId: execution.campaignId,
-      companyId: execution.companyId,
-      phoneNumberId: execution.phoneNumberId,
-      provider: 'twilio',
-      region: allow.region,
-    },
-  };
-}
 function validateTwilioSignature(env: ApiEnv, signature: string, url: string) {
   return validateTwilioMediaSignature(env, signature, url);
 }
@@ -306,32 +290,6 @@ function socketTransport(socket: ServerSocket) {
     send: (value: string) => socket.send(value),
     close: (code?: number, reason?: string) => socket.close(code, reason),
   };
-}
-async function finishSession(prisma: PrismaClient, id: string, failureCode: string) {
-  const session = await prisma.realtimeCallSession.findUnique({
-    where: { id },
-    select: { startedAt: true },
-  });
-  const endedAt = new Date();
-  const completed = ['normal_completion', 'caller_hangup', 'max_duration', 'idle_timeout'].includes(
-    failureCode,
-  );
-  await prisma.realtimeCallSession.updateMany({
-    where: { id, status: { notIn: ['completed', 'failed', 'provider_unknown'] } },
-    data: {
-      status: completed
-        ? 'completed'
-        : failureCode === 'provider_unknown'
-          ? 'provider_unknown'
-          : 'failed',
-      failureCode: completed ? null : failureCode,
-      resultCode: completed ? failureCode : undefined,
-      endedAt,
-      durationSeconds: session?.startedAt
-        ? Math.max(0, Math.ceil((endedAt.getTime() - session.startedAt.getTime()) / 1000))
-        : null,
-    },
-  });
 }
 async function audit(
   prisma: PrismaClient,
