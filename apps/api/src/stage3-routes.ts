@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Prisma, type PrismaClient, UserRole } from '@sales-ai/database';
 import {
-  agentVersionSchema,
   campaignSchema,
   documentSchema,
   entrySchema,
@@ -13,6 +12,7 @@ import {
   simulateSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
+import { registerAiAgentRoutes } from './modules/ai-agents/ai-agent.routes.js';
 import { enqueueOutbox } from './outbox.js';
 import { registerProductRoutes } from './modules/products/product.routes.js';
 import { simulateScenario, targetEligibility, validateScenario } from './stage3-services.js';
@@ -60,77 +60,16 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
       ...requestMetadata(request),
     });
   }
-  async function nextVersion(kind: 'agent' | 'scenario', parentId: string) {
-    const latest =
-      kind === 'agent'
-        ? await prisma.aiAgentVersion.findFirst({
-            where: { aiAgentId: parentId },
-            orderBy: { versionNumber: 'desc' },
-          })
-        : await prisma.scenarioVersion.findFirst({
-            where: { scenarioId: parentId },
-            orderBy: { versionNumber: 'desc' },
-          });
+  async function nextVersion(parentId: string) {
+    const latest = await prisma.scenarioVersion.findFirst({
+      where: { scenarioId: parentId },
+      orderBy: { versionNumber: 'desc' },
+    });
     return (latest?.versionNumber ?? 0) + 1;
   }
 
   registerProductRoutes(app, deps);
-
-  app.get('/api/v1/ai-agents', async (request, reply) => {
-    const auth = await read(request, reply);
-    if (!auth) return;
-    return {
-      aiAgents: await prisma.aiAgent.findMany({
-        where: { organizationId: auth.organizationId },
-        include: { versions: { orderBy: { versionNumber: 'desc' } } },
-        take: 100,
-      }),
-    };
-  });
-  app.post('/api/v1/ai-agents', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const input = resourceInputSchema.parse(request.body);
-    const agent = await prisma.aiAgent.create({
-      data: { organizationId: auth.organizationId, name: input.name, createdBy: auth.userId },
-    });
-    await audit(request, auth, 'ai_agent.created', 'ai_agent', agent.id, { name: agent.name });
-    return reply.code(201).send({ aiAgent: agent });
-  });
-  app.get('/api/v1/ai-agents/:id', async (request, reply) =>
-    resourceDetail(request, reply, 'agent'),
-  );
-  app.patch('/api/v1/ai-agents/:id', async (request, reply) =>
-    updateResource(request, reply, 'agent'),
-  );
-  app.post('/api/v1/ai-agents/:id/archive', async (request, reply) =>
-    updateResource(request, reply, 'agent', true),
-  );
-  app.post('/api/v1/ai-agents/:id/versions', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const input = agentVersionSchema.parse(request.body);
-    if (!(await prisma.aiAgent.findFirst({ where: { id, organizationId: auth.organizationId } })))
-      return deps.error(reply, 404, 'NOT_FOUND', 'AI担当者が見つかりません');
-    const version = await prisma.aiAgentVersion.create({
-      data: {
-        organizationId: auth.organizationId,
-        aiAgentId: id,
-        versionNumber: await nextVersion('agent', id),
-        createdBy: auth.userId,
-        ...input,
-      },
-    });
-    await audit(request, auth, 'ai_agent.version_created', 'ai_agent_version', version.id, {
-      aiAgentId: id,
-      version: version.versionNumber,
-    });
-    return reply.code(201).send({ aiAgentVersion: version });
-  });
-  app.post('/api/v1/ai-agent-versions/:id/publish', async (request, reply) =>
-    publish(request, reply, 'agent'),
-  );
+  registerAiAgentRoutes(app, deps);
 
   app.get('/api/v1/scenarios', async (request, reply) => {
     const auth = await read(request, reply);
@@ -180,7 +119,7 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
       data: {
         organizationId: auth.organizationId,
         scenarioId: id,
-        versionNumber: await nextVersion('scenario', id),
+        versionNumber: await nextVersion(id),
         createdBy: auth.userId,
       },
     });
@@ -582,7 +521,7 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
   async function updateResource(
     request: FastifyRequest,
     reply: FastifyReply,
-    kind: 'agent' | 'scenario' | 'knowledge',
+    kind: 'scenario' | 'knowledge',
     archive = false,
   ) {
     const auth = await manage(request, reply);
@@ -593,20 +532,15 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
       ? { status: 'archived' as const, archivedAt: new Date() }
       : { name: input.name };
     const result =
-      kind === 'agent'
-        ? await prisma.aiAgent.updateMany({
+      kind === 'scenario'
+        ? await prisma.conversationScenario.updateMany({
             where: { id, organizationId: auth.organizationId },
             data,
           })
-        : kind === 'scenario'
-          ? await prisma.conversationScenario.updateMany({
-              where: { id, organizationId: auth.organizationId },
-              data,
-            })
-          : await prisma.knowledgeBase.updateMany({
-              where: { id, organizationId: auth.organizationId },
-              data,
-            });
+        : await prisma.knowledgeBase.updateMany({
+            where: { id, organizationId: auth.organizationId },
+            data,
+          });
     if (!result.count) return deps.error(reply, 404, 'NOT_FOUND', '対象が見つかりません');
     await audit(request, auth, `${kind}.${archive ? 'archived' : 'updated'}`, kind, id);
     return { status: archive ? 'archived' : 'updated' };
@@ -614,34 +548,25 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
   async function resourceDetail(
     request: FastifyRequest,
     reply: FastifyReply,
-    kind: 'agent' | 'scenario' | 'knowledge',
+    kind: 'scenario' | 'knowledge',
   ) {
     const auth = await read(request, reply);
     if (!auth) return;
     const { id } = idParamsSchema.parse(request.params);
     const item =
-      kind === 'agent'
-        ? await prisma.aiAgent.findFirst({
+      kind === 'scenario'
+        ? await prisma.conversationScenario.findFirst({
             where: { id, organizationId: auth.organizationId },
-            include: { versions: true },
+            include: { versions: { include: { nodes: true, edges: true } } },
           })
-        : kind === 'scenario'
-          ? await prisma.conversationScenario.findFirst({
-              where: { id, organizationId: auth.organizationId },
-              include: { versions: { include: { nodes: true, edges: true } } },
-            })
-          : await prisma.knowledgeBase.findFirst({
-              where: { id, organizationId: auth.organizationId },
-              include: { documents: { include: { entries: true } } },
-            });
+        : await prisma.knowledgeBase.findFirst({
+            where: { id, organizationId: auth.organizationId },
+            include: { documents: { include: { entries: true } } },
+          });
     if (!item) return deps.error(reply, 404, 'NOT_FOUND', '対象が見つかりません');
     return { item };
   }
-  async function publish(
-    request: FastifyRequest,
-    reply: FastifyReply,
-    kind: 'agent' | 'knowledge',
-  ) {
+  async function publish(request: FastifyRequest, reply: FastifyReply, kind: 'knowledge') {
     const auth = await manage(request, reply);
     if (!auth) return;
     const { id } = idParamsSchema.parse(request.params);
@@ -650,16 +575,10 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
       publishedBy: auth.userId,
       publishedAt: new Date(),
     };
-    const result =
-      kind === 'agent'
-        ? await prisma.aiAgentVersion.updateMany({
-            where: { id, organizationId: auth.organizationId, status: 'draft' },
-            data,
-          })
-        : await prisma.knowledgeDocument.updateMany({
-            where: { id, organizationId: auth.organizationId, status: 'draft' },
-            data,
-          });
+    const result = await prisma.knowledgeDocument.updateMany({
+      where: { id, organizationId: auth.organizationId, status: 'draft' },
+      data,
+    });
     if (!result.count)
       return deps.error(reply, 409, 'IMMUTABLE_OR_MISSING', 'draft版のみ公開できます');
     await audit(request, auth, `${kind}.published`, `${kind}_version`, id);
