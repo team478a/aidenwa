@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { UserRole, type PrismaClient } from '@sales-ai/database';
 import {
-  fakeRealtimeSimulationSchema,
   followupAssignSchema,
   followupCompleteSchema,
   followupAttemptSchema,
@@ -13,8 +12,8 @@ import {
   type ApiEnv,
 } from '@sales-ai/validation';
 import type { AuthContext } from './types.js';
-import { runFakeRealtimeSimulation } from './stage4b2-services.js';
 import { registerRealtimeSessionRoutes } from './modules/realtime/realtime-session/realtime-session.routes.js';
+import { registerRealtimeSimulationRoutes } from './modules/realtime/realtime-simulation/realtime-simulation.routes.js';
 import { requestMetadata, writeAudit } from './audit.js';
 import { createHmac } from 'node:crypto';
 import { verifyZoomWebhook } from '@sales-ai/human-calling-provider';
@@ -63,19 +62,7 @@ export function registerStage4B2Routes(app: FastifyInstance, deps: Deps) {
       ...requestMetadata(request),
     });
   registerRealtimeSessionRoutes(app, deps);
-  app.post('/api/v1/realtime-simulations', async (request, reply) => {
-    if (env.NODE_ENV === 'production') return reply.code(404).send();
-    const auth = await mutate(request, reply, [UserRole.system_admin]);
-    if (!auth) return;
-    const parsed = fakeRealtimeSimulationSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    const session = await runFakeRealtimeSimulation(prisma, {
-      organizationId: auth.organizationId,
-      userId: auth.userId,
-      ...parsed.data,
-    });
-    return reply.code(201).send({ session });
-  });
+  registerRealtimeSimulationRoutes(app, deps);
   app.get('/api/v1/human-followup-tasks', async (request, reply) => {
     const auth = await deps.authorize(request, reply, [
       UserRole.system_admin,
