@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import type { WebSocket as ServerSocket } from 'ws';
-import WebSocket, { type RawData } from 'ws';
+import type { RawData } from 'ws';
 import { evaluateProductionGate, type PrismaClient } from '@sales-ai/database';
 import type { ApiEnv } from '@sales-ai/validation';
 import {
@@ -10,12 +9,15 @@ import {
   OpenAIRealtimeProvider,
   PcmuRealtimeBridge,
   signRealtimeSessionToken,
-  type RealtimeSocket,
 } from '@sales-ai/realtime';
 import { requestMetadata, writeAudit } from '../../../audit.js';
 import { buildPersistedRealtimePrompt } from '../realtime-simulation/realtime-simulation.service.js';
 import { realtimeActivationBlockers } from './media-stream.policy.js';
 import { finishMediaSession, loadMediaGateContext } from './media-stream.repository.js';
+import {
+  createOpenAIRealtimeSocket,
+  createServerSocketTransport,
+} from './media-stream.transport.js';
 import { realtimeRawDataText, sanitizeRealtimeCode } from '../protocol/realtime-protocol.js';
 import { verifyMediaSessionToken } from '../token/realtime-token.policy.js';
 import { validateTwilioMediaSignature } from '../token/realtime-token.policy.js';
@@ -217,7 +219,7 @@ export function registerStage4B2MediaRoutes(
                 connectTimeoutMs: env.REALTIME_CONNECT_TIMEOUT_MS,
                 maxEventBytes: env.REALTIME_EVENT_MAX_BYTES,
               },
-              createOpenAISocket,
+              createOpenAIRealtimeSocket,
             );
             const instructions = await buildPersistedRealtimePrompt(prisma, {
               organizationId: session.organizationId,
@@ -233,7 +235,7 @@ export function registerStage4B2MediaRoutes(
               instructions,
               maxSeconds: env.REALTIME_SESSION_MAX_SECONDS,
             });
-            bridge = new PcmuRealtimeBridge(realtime, socketTransport(socket), {
+            bridge = new PcmuRealtimeBridge(realtime, createServerSocketTransport(socket), {
               maxPendingAudioBytes: env.REALTIME_MAX_PENDING_AUDIO_BYTES,
               maxMessagesPerSecond: env.REALTIME_MAX_MESSAGES_PER_SECOND,
               maxTwilioBufferedBytes: env.REALTIME_MAX_PENDING_AUDIO_BYTES,
@@ -275,21 +277,6 @@ export function registerStage4B2MediaRoutes(
 
 function validateTwilioSignature(env: ApiEnv, signature: string, url: string) {
   return validateTwilioMediaSignature(env, signature, url);
-}
-function createOpenAISocket(
-  url: string,
-  headers: Readonly<Record<string, string>>,
-): RealtimeSocket {
-  return new WebSocket(url, { headers });
-}
-function socketTransport(socket: ServerSocket) {
-  return {
-    get bufferedAmount() {
-      return socket.bufferedAmount;
-    },
-    send: (value: string) => socket.send(value),
-    close: (code?: number, reason?: string) => socket.close(code, reason),
-  };
 }
 async function audit(
   prisma: PrismaClient,
