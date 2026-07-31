@@ -33,12 +33,16 @@ const SECRET_KEYS = new Set([
   'streamsid',
 ]);
 
+function normalizeAuditKey(key: string) {
+  return key.toLowerCase().replaceAll(/[^a-z0-9]/g, '');
+}
+
 export function sanitizeAudit(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeAudit);
   if (value && typeof value === 'object')
     return Object.fromEntries(
       Object.entries(value)
-        .filter(([key]) => !SECRET_KEYS.has(key.toLowerCase()))
+        .filter(([key]) => !SECRET_KEYS.has(normalizeAuditKey(key)))
         .map(([key, item]) => [key, sanitizeAudit(item)]),
     );
   return value;

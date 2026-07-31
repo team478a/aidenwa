@@ -6,3 +6,10 @@ onlyBuiltDependencies:
   - '@prisma/client'
   - '@prisma/engines'
   - prisma
+
+overrides:
+  '@fastify/ajv-compiler>fast-uri': 3.1.4
+  fast-json-stringify>fast-uri: 4.1.1
+  fastify>find-my-way: 9.7.0
+  next>postcss: 8.5.18
+  next>sharp: 0.35.0

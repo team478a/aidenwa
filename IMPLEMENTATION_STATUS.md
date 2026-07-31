@@ -693,6 +693,32 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Database schema/migrations unchanged; real OpenAI/Twilio calls and real telephone calls: 0.
 - `stage4b2-routes.ts` still contains Followup/Zoom routes assigned to Step 6.
 
+## Release security audit and mock-only rehearsal gate
+
+- Status: local verification COMPLETE; production deployment remains **NO-GO**.
+- Production dependency advisories were remediated by upgrading Next.js to `15.5.21` and
+  overriding affected transitive `fast-uri`, `find-my-way`, `postcss` and `sharp` versions.
+  `pnpm audit --prod --audit-level high`: PASS, no known vulnerabilities.
+- Audit-field redaction now normalizes key spelling before matching, covering variants such as
+  `api_key` and `auth-token`; the Stage 1 audit test verifies password, Cookie, session, CSRF,
+  API-token and raw-message values are absent.
+- `pnpm release:check` verifies CI and `.env.example` use `VoiceProvider=mock`, keep eight
+  external/production feature flags disabled and leave ten external credentials blank.
+- CI now runs both the production dependency audit and the release safety gate.
+- Local verification:
+  - Prisma generate and all 17 existing migrations: PASS.
+  - lint / format / typecheck: PASS.
+  - Unit/API/Worker tests: 70 files, 237 tests PASS.
+  - E2E: 8/8 PASS.
+  - Web/API/Worker production build: PASS.
+  - External Provider/API calls and real telephone calls: 0.
+- Mock-only rehearsal instructions: `docs/operations/release-rehearsal.md`.
+- Go/No-Go decision and remaining operational prerequisites:
+  `docs/operations/release-go-no-go.md`.
+- Stage progression condition: GitHub Actions must pass these new gates. Production deployment
+  additionally requires the written operational approvals and provider activation prerequisites
+  listed in the Go/No-Go document.
+
 ## Stage 4A completion audit
 
 - 専用UI: 承認作成/申請/判断/停止/再開、Provider設定、利用量/Mock費用、Gate拒否一覧、readinessを実装・build確認済み。

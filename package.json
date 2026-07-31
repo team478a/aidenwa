@@ -18,6 +18,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "release:check": "tsx scripts/check-release-gates.ts",
     "db:generate": "pnpm --filter @sales-ai/database db:generate",
     "db:migrate": "pnpm --filter @sales-ai/database db:migrate",
     "db:seed": "pnpm --filter @sales-ai/database db:seed",

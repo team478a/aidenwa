@@ -643,3 +643,17 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Final implementation CI run `30612122483` passed Prisma checks, all migrations, seed, lint,
   format, typecheck, 237 tests, E2E 8/8 and all production builds.
 - Database schema/migrations unchanged; external Provider/API/real telephone calls: 0.
+
+## 2026-07-31 — Release security audit and rehearsal preparation
+
+- Audited authentication/session behavior, organization and owner boundaries, audit sanitization,
+  CI feature flags, tracked files for credential patterns and production dependencies.
+- Hardened audit sanitization so sensitive key variants using underscores or punctuation are
+  redacted, and expanded the Stage 1 test with API-key, auth-token and raw-message fixtures.
+- Upgraded Next.js and pinned safe transitive dependency versions; the production dependency
+  audit changed from 9 high advisories to no known vulnerabilities.
+- Added a fail-closed `release:check`, wired dependency/security gates into CI and documented the
+  mock-only rehearsal and current production No-Go decision.
+- Local checks passed Prisma generation/migrations, lint, format, typecheck, 237 unit/API/Worker
+  tests, E2E 8/8 and all production builds.
+- No schema/migration changes, external Provider/API calls or real telephone calls were made.

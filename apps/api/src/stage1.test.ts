@@ -296,6 +296,9 @@ describe('Stage 1 authentication and authorization', () => {
         passwordHash: 'secret-password-hash',
         sessionToken: 'secret-session-token',
         csrfToken: 'secret-csrf-token',
+        api_key: 'secret-api-key',
+        auth_token: 'secret-auth-token',
+        raw_message: 'secret-provider-message',
         rawData: { email: 'csv-secret@example.test', phone: '09000000000' },
         rows: [{ name: 'CSV Secret Person' }],
       },
@@ -309,6 +312,9 @@ describe('Stage 1 authentication and authorization', () => {
     expect(serialized).not.toContain('secret-cookie');
     expect(serialized).not.toContain('secret-session-token');
     expect(serialized).not.toContain('secret-csrf-token');
+    expect(serialized).not.toContain('secret-api-key');
+    expect(serialized).not.toContain('secret-auth-token');
+    expect(serialized).not.toContain('secret-provider-message');
     expect(serialized).not.toContain('csrfToken');
     expect(serialized).not.toContain('csv-secret@example.test');
     expect(serialized).not.toContain('CSV Secret Person');
