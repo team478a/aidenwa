@@ -5,17 +5,16 @@ import {
   documentSchema,
   entrySchema,
   fixtureSchema,
-  graphSchema,
   idParamsSchema,
   resourceInputSchema,
   searchSchema,
-  simulateSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
 import { registerAiAgentRoutes } from './modules/ai-agents/ai-agent.routes.js';
 import { enqueueOutbox } from './outbox.js';
 import { registerProductRoutes } from './modules/products/product.routes.js';
-import { simulateScenario, targetEligibility, validateScenario } from './stage3-services.js';
+import { registerScenarioRoutes } from './modules/scenarios/scenario.routes.js';
+import { targetEligibility } from './stage3-services.js';
 import type { AuthContext } from './types.js';
 
 type Deps = {
@@ -60,119 +59,9 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
       ...requestMetadata(request),
     });
   }
-  async function nextVersion(parentId: string) {
-    const latest = await prisma.scenarioVersion.findFirst({
-      where: { scenarioId: parentId },
-      orderBy: { versionNumber: 'desc' },
-    });
-    return (latest?.versionNumber ?? 0) + 1;
-  }
-
   registerProductRoutes(app, deps);
   registerAiAgentRoutes(app, deps);
-
-  app.get('/api/v1/scenarios', async (request, reply) => {
-    const auth = await read(request, reply);
-    if (!auth) return;
-    return {
-      scenarios: await prisma.conversationScenario.findMany({
-        where: { organizationId: auth.organizationId },
-        include: { versions: { orderBy: { versionNumber: 'desc' } } },
-        take: 100,
-      }),
-    };
-  });
-  app.post('/api/v1/scenarios', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const input = resourceInputSchema.parse(request.body);
-    const scenario = await prisma.conversationScenario.create({
-      data: {
-        organizationId: auth.organizationId,
-        name: input.name,
-        purpose: input.purpose ?? '',
-        createdBy: auth.userId,
-      },
-    });
-    await audit(request, auth, 'scenario.created', 'scenario', scenario.id, {
-      name: scenario.name,
-    });
-    return reply.code(201).send({ scenario });
-  });
-  app.get('/api/v1/scenarios/:id', async (request, reply) =>
-    resourceDetail(request, reply, 'scenario'),
-  );
-  app.patch('/api/v1/scenarios/:id', async (request, reply) =>
-    updateResource(request, reply, 'scenario'),
-  );
-  app.post('/api/v1/scenarios/:id/versions', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    if (
-      !(await prisma.conversationScenario.findFirst({
-        where: { id, organizationId: auth.organizationId },
-      }))
-    )
-      return deps.error(reply, 404, 'NOT_FOUND', 'シナリオが見つかりません');
-    const version = await prisma.scenarioVersion.create({
-      data: {
-        organizationId: auth.organizationId,
-        scenarioId: id,
-        versionNumber: await nextVersion(id),
-        createdBy: auth.userId,
-      },
-    });
-    return reply.code(201).send({ scenarioVersion: version });
-  });
-  app.put('/api/v1/scenario-versions/:id/graph', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const graph = graphSchema.parse(request.body);
-    const version = await prisma.scenarioVersion.findFirst({
-      where: { id, organizationId: auth.organizationId, status: 'draft' },
-    });
-    if (!version) return deps.error(reply, 409, 'IMMUTABLE_OR_MISSING', 'draft版のみ編集できます');
-    await prisma.$transaction([
-      prisma.scenarioEdge.deleteMany({ where: { scenarioVersionId: id } }),
-      prisma.scenarioNode.deleteMany({ where: { scenarioVersionId: id } }),
-    ]);
-    await prisma.scenarioNode.createMany({
-      data: graph.nodes.map((node) => ({
-        organizationId: auth.organizationId,
-        scenarioVersionId: id,
-        ...node,
-        extractionSchema: node.extractionSchema as Prisma.InputJsonObject,
-        config: node.config as Prisma.InputJsonObject,
-      })),
-    });
-    await prisma.scenarioEdge.createMany({
-      data: graph.edges.map((edge) => ({
-        organizationId: auth.organizationId,
-        scenarioVersionId: id,
-        ...edge,
-      })),
-    });
-    await prisma.scenarioVersion.update({
-      where: { id },
-      data: {
-        validationStatus: 'unvalidated',
-        validationErrors: [],
-        startNodeKey: graph.nodes.find((node) => node.nodeType === 'start')?.nodeKey,
-      },
-    });
-    return { status: 'saved' };
-  });
-  app.post('/api/v1/scenario-versions/:id/validate', async (request, reply) =>
-    scenarioAction(request, reply, 'validate'),
-  );
-  app.post('/api/v1/scenario-versions/:id/publish', async (request, reply) =>
-    scenarioAction(request, reply, 'publish'),
-  );
-  app.post('/api/v1/scenario-versions/:id/simulate', async (request, reply) =>
-    scenarioAction(request, reply, 'simulate'),
-  );
+  registerScenarioRoutes(app, deps);
 
   app.get('/api/v1/knowledge-bases', async (request, reply) => {
     const auth = await read(request, reply);
@@ -202,9 +91,7 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
     });
     return reply.code(201).send({ knowledgeBase: item });
   });
-  app.get('/api/v1/knowledge-bases/:id', async (request, reply) =>
-    resourceDetail(request, reply, 'knowledge'),
-  );
+  app.get('/api/v1/knowledge-bases/:id', async (request, reply) => resourceDetail(request, reply));
   app.patch('/api/v1/knowledge-bases/:id', async (request, reply) =>
     updateResource(request, reply, 'knowledge'),
   );
@@ -521,7 +408,7 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
   async function updateResource(
     request: FastifyRequest,
     reply: FastifyReply,
-    kind: 'scenario' | 'knowledge',
+    kind: 'knowledge',
     archive = false,
   ) {
     const auth = await manage(request, reply);
@@ -531,38 +418,22 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
     const data = archive
       ? { status: 'archived' as const, archivedAt: new Date() }
       : { name: input.name };
-    const result =
-      kind === 'scenario'
-        ? await prisma.conversationScenario.updateMany({
-            where: { id, organizationId: auth.organizationId },
-            data,
-          })
-        : await prisma.knowledgeBase.updateMany({
-            where: { id, organizationId: auth.organizationId },
-            data,
-          });
+    const result = await prisma.knowledgeBase.updateMany({
+      where: { id, organizationId: auth.organizationId },
+      data,
+    });
     if (!result.count) return deps.error(reply, 404, 'NOT_FOUND', '対象が見つかりません');
     await audit(request, auth, `${kind}.${archive ? 'archived' : 'updated'}`, kind, id);
     return { status: archive ? 'archived' : 'updated' };
   }
-  async function resourceDetail(
-    request: FastifyRequest,
-    reply: FastifyReply,
-    kind: 'scenario' | 'knowledge',
-  ) {
+  async function resourceDetail(request: FastifyRequest, reply: FastifyReply) {
     const auth = await read(request, reply);
     if (!auth) return;
     const { id } = idParamsSchema.parse(request.params);
-    const item =
-      kind === 'scenario'
-        ? await prisma.conversationScenario.findFirst({
-            where: { id, organizationId: auth.organizationId },
-            include: { versions: { include: { nodes: true, edges: true } } },
-          })
-        : await prisma.knowledgeBase.findFirst({
-            where: { id, organizationId: auth.organizationId },
-            include: { documents: { include: { entries: true } } },
-          });
+    const item = await prisma.knowledgeBase.findFirst({
+      where: { id, organizationId: auth.organizationId },
+      include: { documents: { include: { entries: true } } },
+    });
     if (!item) return deps.error(reply, 404, 'NOT_FOUND', '対象が見つかりません');
     return { item };
   }
@@ -583,47 +454,6 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
       return deps.error(reply, 409, 'IMMUTABLE_OR_MISSING', 'draft版のみ公開できます');
     await audit(request, auth, `${kind}.published`, `${kind}_version`, id);
     return { status: 'published' };
-  }
-  async function scenarioAction(
-    request: FastifyRequest,
-    reply: FastifyReply,
-    action: 'validate' | 'publish' | 'simulate',
-  ) {
-    const auth = action === 'simulate' ? await read(request, reply) : await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const version = await prisma.scenarioVersion.findFirst({
-      where: { id, organizationId: auth.organizationId },
-      include: { nodes: true, edges: true },
-    });
-    if (!version) return deps.error(reply, 404, 'NOT_FOUND', '版が見つかりません');
-    const errors = validateScenario(version.nodes, version.edges);
-    if (action === 'simulate') {
-      const input = simulateSchema.parse(request.body);
-      if (errors.length) return deps.error(reply, 409, 'INVALID_SCENARIO', '検証エラーがあります');
-      return simulateScenario(version.nodes, version.edges, input.intents);
-    }
-    await prisma.scenarioVersion.update({
-      where: { id },
-      data:
-        action === 'publish' && !errors.length
-          ? {
-              validationStatus: 'valid',
-              validationErrors: [],
-              status: 'published',
-              publishedBy: auth.userId,
-              publishedAt: new Date(),
-            }
-          : { validationStatus: errors.length ? 'invalid' : 'valid', validationErrors: errors },
-    });
-    await audit(request, auth, `scenario.${action}`, 'scenario_version', id, { errors });
-    if (action === 'publish' && errors.length)
-      return deps.error(reply, 409, 'INVALID_SCENARIO', '検証エラーがあります');
-    return {
-      valid: !errors.length,
-      errors,
-      status: action === 'publish' ? 'published' : undefined,
-    };
   }
   async function campaignReferences(
     org: string,
