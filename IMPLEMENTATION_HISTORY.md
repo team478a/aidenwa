@@ -589,3 +589,16 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30597838915` passed Prisma format/validate/generate, migrations, seed,
   lint, format, typecheck, 201 tests, E2E 8/8 and all production builds.
 - Database schema and migrations were unchanged; external LLM/Provider calls and real calls: 0.
+
+## 2026-07-31 — Phase 9 Step 3 remaining domains
+
+- Split Scenarios, Knowledge, Campaigns, Campaign Targets and Call Jobs into dedicated Route,
+  Controller, Service, Repository and Policy-oriented modules.
+- Moved Scenario validator/simulator implementations and Campaign Target eligibility into their
+  owning domains; retained `stage3-services.ts` only as a compatibility export boundary.
+- Reduced `stage3-routes.ts` from 837 lines before these slices to 27 lines.
+- Added focused Policy tests for each extracted domain, bringing the full suite to 206 tests.
+- Final implementation commits were `a474b60` and `137d643`.
+- GitHub Actions run `30601052065` passed Prisma format/validate/generate, all migrations, seed,
+  lint, format, typecheck, 206 tests, E2E 8/8 and all production builds.
+- Database schema and migrations were unchanged; external LLM/Provider/API calls and real calls: 0.

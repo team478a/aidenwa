@@ -55,14 +55,23 @@
   - OptOut audit projections exclude raw phone/email snapshots.
   - Remaining Stage 2 domains: none.
 - Stage 2 sales-data modularization: COMPLETE.
-- Stage 3 settings/campaign modularization: IN PROGRESS.
+- Stage 3 settings/campaign modularization: COMPLETE.
   - Products implementation commit: `b9ec693`.
   - Products CI run: `30592816681` PASS.
   - AI Agents implementation commit: `0bdc012`.
   - AI Agents CI run: `30597838915` PASS.
-  - Unit/API/Worker/Web configuration: 44 files, 201 tests PASS.
+  - Scenarios CI run: `30598928327` PASS.
+  - Knowledge CI run: `30599418625` PASS.
+  - Campaigns CI run: `30599813223` PASS.
+  - Campaign Targets CI run: `30600186186` PASS.
+  - Call Jobs implementation commit: `a474b60`.
+  - Final domain-service relocation commit: `137d643`.
+  - Final CI run: `30601052065` PASS.
+  - Unit/API/Worker/Web configuration: 49 files, 206 tests PASS.
   - E2E: 8/8 PASS.
-  - `stage3-routes.ts`: 993 to 837 lines.
+  - `stage3-routes.ts`: 993 to 27 lines; registration/composition only.
   - Published immutability, version numbering, API contracts and organization scope preserved.
   - External LLM/Provider/API calls and real calls: 0.
-- Next target: Scenarios domain modularization.
+- Scenario validation/simulation and Campaign Target eligibility live in their owning modules;
+  `stage3-services.ts` is a compatibility-export boundary only.
+- Next target: Phase 9 Step 4 production-safety modularization.

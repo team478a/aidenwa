@@ -152,6 +152,19 @@ Worker jobs:
 The former `mock-call.ts` is a compatibility-export boundary only. Dispatch remains hard-wired
 to `MockVoiceProvider`; no production Provider is reachable through this module.
 
+### Stage 3 settings and campaigns
+
+- `modules/products`, `modules/ai-agents`, `modules/scenarios` and `modules/knowledge`: versioned
+  settings resources with scoped repositories and immutable publish transitions.
+- `modules/campaigns`: campaign lifecycle and organization-scoped management.
+- `modules/campaign-targets`: preview/materialization plus FAX, callable and opt-out eligibility.
+- `modules/call-jobs`: Mock Call queueing, scoped reads, cancellation and manual Mock outcomes.
+- `stage3-routes.ts`: registration/composition only.
+- `stage3-services.ts`: compatibility exports only; business logic lives in domain modules.
+
+These modules preserve Mock-only execution. They do not construct a production Voice Provider or
+initiate an external call.
+
 ### Production Calls
 
 Worker:

@@ -612,6 +612,28 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Database schema and migrations: unchanged. External Provider/API/real telephone calls: 0.
 - Phase 8 implementation work: complete.
 
+## Phase 9 Step 3 — Stage 3 settings and campaign modularization
+
+- Status: COMPLETE.
+- Products, AI Agents, Scenarios, Knowledge, Campaigns, Campaign Targets and Call Jobs are split
+  into Route, Controller, Service, Repository and Policy-oriented domain boundaries.
+- `stage3-routes.ts` was reduced from 993 lines to a 27-line registration/composition boundary.
+- Scenario validation/simulation and Campaign Target eligibility now live in their owning domain
+  modules; `stage3-services.ts` contains compatibility exports only.
+- Organization scope, sales-owner scope, immutable published versions, FAX/opt-out eligibility,
+  mock-call idempotency, CSRF, audit actions and API response contracts are preserved.
+- Database schema and migrations: unchanged.
+- Final implementation commits: Call Jobs `a474b60`; service relocation `137d643`.
+- GitHub Actions run `30601052065`: PASS.
+  - Prisma generate / format / validate: PASS.
+  - All migrations and seed against the CI database: PASS.
+  - lint / format / typecheck: PASS.
+  - Unit/API/Worker/Web configuration: 49 files, 206 tests PASS.
+  - E2E: 8/8 PASS.
+  - Web/API/Worker production build: PASS.
+- External LLM/Provider/API calls and real telephone calls: 0.
+- Next Phase 9 step: Step 4 production-safety modularization. Not started.
+
 ## Stage 4A completion audit
 
 - 専用UI: 承認作成/申請/判断/停止/再開、Provider設定、利用量/Mock費用、Gate拒否一覧、readinessを実装・build確認済み。
