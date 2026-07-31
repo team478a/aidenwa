@@ -8,13 +8,13 @@ import {
   fixtureSchema,
   graphSchema,
   idParamsSchema,
-  productVersionSchema,
   resourceInputSchema,
   searchSchema,
   simulateSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
 import { enqueueOutbox } from './outbox.js';
+import { registerProductRoutes } from './modules/products/product.routes.js';
 import { simulateScenario, targetEligibility, validateScenario } from './stage3-services.js';
 import type { AuthContext } from './types.js';
 
@@ -60,94 +60,21 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
       ...requestMetadata(request),
     });
   }
-  async function nextVersion(kind: 'product' | 'agent' | 'scenario', parentId: string) {
-    const model =
-      kind === 'product'
-        ? prisma.productVersion
-        : kind === 'agent'
-          ? prisma.aiAgentVersion
-          : prisma.scenarioVersion;
-    const key = kind === 'product' ? 'productId' : kind === 'agent' ? 'aiAgentId' : 'scenarioId';
-    const latest = await (model as typeof prisma.productVersion).findFirst({
-      where: { [key]: parentId },
-      orderBy: { versionNumber: 'desc' },
-    });
+  async function nextVersion(kind: 'agent' | 'scenario', parentId: string) {
+    const latest =
+      kind === 'agent'
+        ? await prisma.aiAgentVersion.findFirst({
+            where: { aiAgentId: parentId },
+            orderBy: { versionNumber: 'desc' },
+          })
+        : await prisma.scenarioVersion.findFirst({
+            where: { scenarioId: parentId },
+            orderBy: { versionNumber: 'desc' },
+          });
     return (latest?.versionNumber ?? 0) + 1;
   }
 
-  app.get('/api/v1/products', async (request, reply) => {
-    const auth = await read(request, reply);
-    if (!auth) return;
-    return {
-      products: await prisma.product.findMany({
-        where: { organizationId: auth.organizationId },
-        include: { versions: { orderBy: { versionNumber: 'desc' } } },
-        orderBy: { updatedAt: 'desc' },
-        take: 100,
-      }),
-    };
-  });
-  app.post('/api/v1/products', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const input = resourceInputSchema.parse(request.body);
-    const product = await prisma.product.create({
-      data: {
-        organizationId: auth.organizationId,
-        name: input.name,
-        code: input.code ?? input.name.toLowerCase().replace(/\s+/gu, '-'),
-        category: input.category,
-        createdBy: auth.userId,
-      },
-    });
-    await audit(request, auth, 'product.created', 'product', product.id, {
-      name: product.name,
-      code: product.code,
-    });
-    return reply.code(201).send({ product });
-  });
-  app.get('/api/v1/products/:id', async (request, reply) => {
-    const auth = await read(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const product = await prisma.product.findFirst({
-      where: { id, organizationId: auth.organizationId },
-      include: { versions: { orderBy: { versionNumber: 'desc' } } },
-    });
-    if (!product) return deps.error(reply, 404, 'NOT_FOUND', '商材が見つかりません');
-    return { product };
-  });
-  app.patch('/api/v1/products/:id', async (request, reply) =>
-    updateResource(request, reply, 'product'),
-  );
-  app.post('/api/v1/products/:id/archive', async (request, reply) =>
-    updateResource(request, reply, 'product', true),
-  );
-  app.post('/api/v1/products/:id/versions', async (request, reply) => {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const input = productVersionSchema.parse(request.body);
-    if (!(await prisma.product.findFirst({ where: { id, organizationId: auth.organizationId } })))
-      return deps.error(reply, 404, 'NOT_FOUND', '商材が見つかりません');
-    const version = await prisma.productVersion.create({
-      data: {
-        organizationId: auth.organizationId,
-        productId: id,
-        versionNumber: await nextVersion('product', id),
-        createdBy: auth.userId,
-        ...input,
-      },
-    });
-    await audit(request, auth, 'product.version_created', 'product_version', version.id, {
-      productId: id,
-      version: version.versionNumber,
-    });
-    return reply.code(201).send({ productVersion: version });
-  });
-  app.post('/api/v1/product-versions/:id/publish', async (request, reply) =>
-    publish(request, reply, 'product'),
-  );
+  registerProductRoutes(app, deps);
 
   app.get('/api/v1/ai-agents', async (request, reply) => {
     const auth = await read(request, reply);
@@ -655,7 +582,7 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
   async function updateResource(
     request: FastifyRequest,
     reply: FastifyReply,
-    kind: 'product' | 'agent' | 'scenario' | 'knowledge',
+    kind: 'agent' | 'scenario' | 'knowledge',
     archive = false,
   ) {
     const auth = await manage(request, reply);
@@ -665,18 +592,21 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
     const data = archive
       ? { status: 'archived' as const, archivedAt: new Date() }
       : { name: input.name };
-    const model =
-      kind === 'product'
-        ? prisma.product
-        : kind === 'agent'
-          ? prisma.aiAgent
-          : kind === 'scenario'
-            ? prisma.conversationScenario
-            : prisma.knowledgeBase;
-    const result = await (model as typeof prisma.product).updateMany({
-      where: { id, organizationId: auth.organizationId },
-      data,
-    });
+    const result =
+      kind === 'agent'
+        ? await prisma.aiAgent.updateMany({
+            where: { id, organizationId: auth.organizationId },
+            data,
+          })
+        : kind === 'scenario'
+          ? await prisma.conversationScenario.updateMany({
+              where: { id, organizationId: auth.organizationId },
+              data,
+            })
+          : await prisma.knowledgeBase.updateMany({
+              where: { id, organizationId: auth.organizationId },
+              data,
+            });
     if (!result.count) return deps.error(reply, 404, 'NOT_FOUND', '対象が見つかりません');
     await audit(request, auth, `${kind}.${archive ? 'archived' : 'updated'}`, kind, id);
     return { status: archive ? 'archived' : 'updated' };
@@ -710,7 +640,7 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
   async function publish(
     request: FastifyRequest,
     reply: FastifyReply,
-    kind: 'product' | 'agent' | 'knowledge',
+    kind: 'agent' | 'knowledge',
   ) {
     const auth = await manage(request, reply);
     if (!auth) return;
@@ -721,20 +651,15 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
       publishedAt: new Date(),
     };
     const result =
-      kind === 'product'
-        ? await prisma.productVersion.updateMany({
+      kind === 'agent'
+        ? await prisma.aiAgentVersion.updateMany({
             where: { id, organizationId: auth.organizationId, status: 'draft' },
             data,
           })
-        : kind === 'agent'
-          ? await prisma.aiAgentVersion.updateMany({
-              where: { id, organizationId: auth.organizationId, status: 'draft' },
-              data,
-            })
-          : await prisma.knowledgeDocument.updateMany({
-              where: { id, organizationId: auth.organizationId, status: 'draft' },
-              data,
-            });
+        : await prisma.knowledgeDocument.updateMany({
+            where: { id, organizationId: auth.organizationId, status: 'draft' },
+            data,
+          });
     if (!result.count)
       return deps.error(reply, 409, 'IMMUTABLE_OR_MISSING', 'draft版のみ公開できます');
     await audit(request, auth, `${kind}.published`, `${kind}_version`, id);
