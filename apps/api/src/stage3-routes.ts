@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient, UserRole } from '@sales-ai/database';
 import { fixtureSchema, idParamsSchema } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
 import { registerAiAgentRoutes } from './modules/ai-agents/ai-agent.routes.js';
+import { registerCampaignTargetRoutes } from './modules/campaign-targets/campaign-target.routes.js';
 import { registerCampaignRoutes } from './modules/campaigns/campaign.routes.js';
 import { registerKnowledgeRoutes } from './modules/knowledge/knowledge.routes.js';
 import { enqueueOutbox } from './outbox.js';
@@ -58,28 +59,7 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
   registerScenarioRoutes(app, deps);
   registerKnowledgeRoutes(app, deps);
   registerCampaignRoutes(app, deps);
-  app.post('/api/v1/campaigns/:id/targets/preview', async (request, reply) =>
-    targets(request, reply, false),
-  );
-  app.post('/api/v1/campaigns/:id/targets/materialize', async (request, reply) =>
-    targets(request, reply, true),
-  );
-  app.get('/api/v1/campaigns/:id/targets', async (request, reply) => {
-    const auth = await read(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    return {
-      targets: await prisma.campaignTarget.findMany({
-        where: {
-          campaignId: id,
-          organizationId: auth.organizationId,
-          ...(auth.role === UserRole.sales ? { ownerUserIdSnapshot: auth.userId } : {}),
-        },
-        orderBy: { createdAt: 'asc' },
-        take: 1000,
-      }),
-    };
-  });
+  registerCampaignTargetRoutes(app, deps);
   app.post('/api/v1/campaigns/:id/mock-calls/run-next', async (request, reply) => {
     const auth = await manage(request, reply);
     if (!auth) return;
@@ -209,68 +189,6 @@ export function registerStage3Routes(app: FastifyInstance, deps: Deps) {
     return { status: 'updated' };
   });
 
-  async function targets(request: FastifyRequest, reply: FastifyReply, materialize: boolean) {
-    const auth = await manage(request, reply);
-    if (!auth) return;
-    const { id } = idParamsSchema.parse(request.params);
-    const campaign = await prisma.campaign.findFirst({
-      where: { id, organizationId: auth.organizationId, status: 'draft' },
-    });
-    if (!campaign) return deps.error(reply, 409, 'INVALID_STATE', 'draftのみ対象化できます');
-    const members = await prisma.salesListCompany.findMany({
-      where: { salesListId: campaign.salesListId, removedAt: null },
-      include: {
-        company: { include: { phoneNumbers: { where: { isPrimary: true, isDeleted: false } } } },
-      },
-      take: 10000,
-    });
-    const rows = [];
-    for (const member of members) {
-      const phone = member.company.phoneNumbers[0];
-      const eligibility = await targetEligibility(
-        prisma,
-        auth.organizationId,
-        member.companyId,
-        phone?.id,
-      );
-      rows.push({
-        companyId: member.companyId,
-        phoneNumberId: phone?.id ?? null,
-        ownerUserIdSnapshot: member.company.ownerUserId,
-        eligible: eligibility.eligible,
-        exclusionReason: eligibility.reason,
-      });
-    }
-    if (materialize) {
-      await prisma.campaignTarget.deleteMany({ where: { campaignId: id } });
-      for (const row of rows)
-        await prisma.campaignTarget.create({
-          data: {
-            organizationId: auth.organizationId,
-            campaignId: id,
-            companyId: row.companyId,
-            phoneNumberId: row.phoneNumberId,
-            ownerUserIdSnapshot: row.ownerUserIdSnapshot,
-            status: row.eligible ? 'pending' : 'excluded',
-            eligibilityStatus: row.eligible ? 'eligible' : 'excluded',
-            exclusionReason: row.exclusionReason,
-          },
-        });
-      await audit(request, auth, 'campaign.targets_materialized', 'campaign', id, {
-        total: rows.length,
-        eligible: rows.filter((r) => r.eligible).length,
-        excluded: rows.filter((r) => !r.eligible).length,
-      });
-    }
-    return {
-      targets: rows,
-      summary: {
-        total: rows.length,
-        eligible: rows.filter((r) => r.eligible).length,
-        excluded: rows.filter((r) => !r.eligible).length,
-      },
-    };
-  }
   async function callRead(request: FastifyRequest, reply: FastifyReply, detail = false) {
     const auth = await read(request, reply);
     if (!auth) return;
