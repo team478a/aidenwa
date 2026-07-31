@@ -1,8 +1,8 @@
 # Implementation Status
 
 - Current stage: Maintainability remediation Phase 9 — COMPLETE
-- Release state: Phase 1–8, additional fixes 5.1–5.4 and Phase 9 Steps 1–8 verified locally;
-  external providers disabled
+- Release state: Phase 1–8, additional fixes 5.1–5.4 and Phase 9 Steps 1–8 verified locally and
+  in CI; external providers disabled
 - Updated: 2026-07-31
 - Latest verification:
   - Unit/API/Worker/Web configuration: 237 tests PASS locally
@@ -10,7 +10,7 @@
   - Production build: Web/API/Worker PASS
   - GitHub Actions: run `30612122483` PASS for Phase 9 completion
   - Latest implementation commit: `2770056` (Worker Maintenance job split)
-  - Latest documentation commit: pending this update
+  - Latest documentation commit: `bdf1b1b` (Phase 9 completion record)
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 9
