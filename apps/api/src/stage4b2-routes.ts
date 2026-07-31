@@ -9,12 +9,12 @@ import {
   followupVersionSchema,
   fakeZoomCallSchema,
   followupAssignmentRuleSchema,
-  realtimeTerminateSchema,
   reasonSchema,
   type ApiEnv,
 } from '@sales-ai/validation';
 import type { AuthContext } from './types.js';
 import { runFakeRealtimeSimulation } from './stage4b2-services.js';
+import { registerRealtimeSessionRoutes } from './modules/realtime/realtime-session/realtime-session.routes.js';
 import { requestMetadata, writeAudit } from './audit.js';
 import { createHmac } from 'node:crypto';
 import { verifyZoomWebhook } from '@sales-ai/human-calling-provider';
@@ -62,63 +62,7 @@ export function registerStage4B2Routes(app: FastifyInstance, deps: Deps) {
       afterData,
       ...requestMetadata(request),
     });
-  app.get('/api/v1/realtime-sessions', async (request, reply) => {
-    const auth = await deps.authorize(request, reply, [
-      UserRole.system_admin,
-      UserRole.admin,
-      UserRole.manager,
-    ]);
-    if (!auth) return;
-    return {
-      sessions: await prisma.realtimeCallSession.findMany({
-        where: { organizationId: auth.organizationId },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      }),
-    };
-  });
-  app.get('/api/v1/realtime-sessions/:id', async (request, reply) => {
-    const auth = await deps.authorize(request, reply, [
-      UserRole.system_admin,
-      UserRole.admin,
-      UserRole.manager,
-    ]);
-    if (!auth) return;
-    const id = (request.params as { id: string }).id;
-    const session = await prisma.realtimeCallSession.findFirst({
-      where: { id, organizationId: auth.organizationId },
-    });
-    if (!session) return deps.error(reply, 404, 'NOT_FOUND', 'セッションがありません');
-    return {
-      session,
-      events: await prisma.realtimeCallEvent.findMany({
-        where: { sessionId: id, organizationId: auth.organizationId },
-        orderBy: { monotonicSequence: 'asc' },
-      }),
-    };
-  });
-  app.post('/api/v1/realtime-sessions/:id/terminate', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.system_admin, UserRole.admin]);
-    if (!auth) return;
-    const parsed = realtimeTerminateSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    const id = (request.params as { id: string }).id;
-    const result = await prisma.realtimeCallSession.updateMany({
-      where: {
-        id,
-        organizationId: auth.organizationId,
-        status: { in: ['reserved', 'connecting', 'active', 'ending'] },
-      },
-      data: { status: 'completed', resultCode: 'terminated_by_operator', endedAt: new Date() },
-    });
-    if (!result.count)
-      return deps.error(reply, 404, 'NOT_FOUND', '終了可能なセッションがありません');
-    await audit(request, auth, 'realtime.session.terminated', 'realtime_call_session', id, {
-      reason: parsed.data.reason,
-      redialScheduled: false,
-    });
-    return { terminated: true, redialScheduled: false };
-  });
+  registerRealtimeSessionRoutes(app, deps);
   app.post('/api/v1/realtime-simulations', async (request, reply) => {
     if (env.NODE_ENV === 'production') return reply.code(404).send();
     const auth = await mutate(request, reply, [UserRole.system_admin]);
