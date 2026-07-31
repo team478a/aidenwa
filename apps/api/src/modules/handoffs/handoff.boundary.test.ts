@@ -27,4 +27,15 @@ describe('handoff module boundaries', () => {
     expect(source).not.toContain('app.post(');
     expect(source).toContain('registerHandoffRoutes(app, deps)');
   });
+
+  it('keeps handoff feedback append-only', async () => {
+    const source = await readFile(
+      new URL('./feedback/handoff-feedback.service.ts', import.meta.url),
+      'utf8',
+    );
+
+    expect(source).toContain('salesHandoffFeedback.create');
+    expect(source).not.toContain('salesHandoffFeedback.update');
+    expect(source).not.toContain('salesHandoffFeedback.delete');
+  });
 });
