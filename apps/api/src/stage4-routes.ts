@@ -15,6 +15,7 @@ import {
   stopSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
+import { registerReadinessRoutes } from './modules/production-safety/readiness/readiness.routes.js';
 import { enqueueOutbox } from './outbox.js';
 import type { AuthContext } from './types.js';
 
@@ -62,70 +63,7 @@ export function registerStage4Routes(app: FastifyInstance, deps: Deps) {
       ...requestMetadata(request),
     });
 
-  app.get('/api/v1/production-readiness', async (request, reply) => {
-    const auth = await deps.authorize(request, reply, [
-      UserRole.system_admin,
-      UserRole.admin,
-      UserRole.manager,
-    ]);
-    if (!auth) return;
-    const query = request.query as { organizationId?: string };
-    const organizationId = org(auth, query.organizationId);
-    const [approval, policy, providers, activeStops, allowlistCount] = await Promise.all([
-      prisma.productionCallApproval.findFirst({
-        where: { organizationId },
-        orderBy: { updatedAt: 'desc' },
-      }),
-      prisma.productionCallPolicy.findUnique({ where: { organizationId } }),
-      prisma.providerConfiguration.findMany({
-        where: { organizationId },
-        orderBy: { provider: 'asc' },
-      }),
-      prisma.emergencyStop.findMany({
-        where: { active: true, OR: [{ scope: 'system' }, { organizationId }] },
-      }),
-      prisma.testCallAllowlist.count({
-        where: {
-          organizationId,
-          active: true,
-          consentConfirmed: true,
-          expiresAt: { gt: new Date() },
-        },
-      }),
-    ]);
-    const approvalState = !approval
-      ? 'incomplete'
-      : approval.status === 'approved' && approval.expiresAt && approval.expiresAt > new Date()
-        ? 'complete'
-        : approval.expiresAt && approval.expiresAt <= new Date()
-          ? 'expired'
-          : 'review_required';
-    return {
-      readiness: {
-        overall: 'unavailable',
-        realCallingEnabled: false,
-        checks: [
-          { key: 'approval', state: approvalState },
-          { key: 'policy', state: policy ? 'complete' : 'incomplete' },
-          {
-            key: 'provider',
-            state: providers.some((p) => p.allowed && !p.productionEnabled)
-              ? 'complete'
-              : 'incomplete',
-          },
-          { key: 'allowlist', state: allowlistCount > 0 ? 'complete' : 'incomplete' },
-          { key: 'emergencyStop', state: activeStops.length ? 'review_required' : 'complete' },
-          { key: 'writtenApproval', state: 'incomplete' },
-          { key: 'realProvider', state: 'unavailable' },
-        ],
-        approval,
-        policy,
-        providers,
-        activeStops,
-        allowlistCount,
-      },
-    };
-  });
+  registerReadinessRoutes(app, deps);
 
   app.get('/api/v1/production-approvals', async (request, reply) => {
     const auth = await deps.authorize(request, reply, [
