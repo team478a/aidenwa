@@ -12,6 +12,13 @@ import {
   fakeHandoffFixture,
   finalizeSalesHandoff,
 } from './handoff-card/handoff-finalization.service.js';
+import { addHandoffFeedback } from './feedback/handoff-feedback.service.js';
+import { handoffQualitySummary } from './quality/handoff-quality.service.js';
+import {
+  createHandoffSetting,
+  listHandoffSettings,
+  transitionHandoffSetting,
+} from './settings/handoff-settings.service.js';
 
 type Deps = {
   prisma: PrismaClient;
@@ -113,8 +120,11 @@ export function registerHandoffRoutes(app: FastifyInstance, deps: Deps) {
     if (!(await scopedCard(id, auth)))
       return deps.error(reply, 404, 'NOT_FOUND', '引継ぎカードがありません');
     const input = handoffFeedbackSchema.parse(request.body);
-    const feedback = await prisma.salesHandoffFeedback.create({
-      data: { organizationId: auth.organizationId, cardId: id, userId: auth.userId, ...input },
+    const feedback = await addHandoffFeedback(prisma, {
+      organizationId: auth.organizationId,
+      cardId: id,
+      userId: auth.userId,
+      ...input,
     });
     await audit(request, auth, 'sales_handoff.feedback_added', id, {
       verdict: input.verdict,
@@ -151,50 +161,24 @@ export function registerHandoffRoutes(app: FastifyInstance, deps: Deps) {
       UserRole.manager,
     ]);
     if (!auth) return;
-    const [total, lowConfidence, feedback, incorrect] = await Promise.all([
-      prisma.salesHandoffCard.count({ where: { organizationId: auth.organizationId } }),
-      prisma.salesHandoffCard.count({
-        where: { organizationId: auth.organizationId, confidenceBand: 'low' },
-      }),
-      prisma.salesHandoffFeedback.count({ where: { organizationId: auth.organizationId } }),
-      prisma.salesHandoffFeedback.count({
-        where: { organizationId: auth.organizationId, verdict: 'incorrect' },
-      }),
-    ]);
-    return {
-      total,
-      lowConfidence,
-      humanReviewRate: total ? lowConfidence / total : 0,
-      feedbackCount: feedback,
-      incorrectRate: feedback ? incorrect / feedback : 0,
-    };
+    return handoffQualitySummary(prisma, auth.organizationId);
   });
   app.get('/api/v1/handoff-settings', async (request, reply) => {
     const auth = await deps.authorize(request, reply, [UserRole.system_admin, UserRole.admin]);
     if (!auth) return;
     return {
-      settings: await prisma.handoffSetting.findMany({
-        where: { organizationId: auth.organizationId },
-        orderBy: { version: 'desc' },
-      }),
+      settings: await listHandoffSettings(prisma, auth.organizationId),
     };
   });
   app.post('/api/v1/handoff-settings', async (request, reply) => {
     const auth = await deps.authorize(request, reply, [UserRole.system_admin, UserRole.admin]);
     if (!auth || !deps.verifyCsrf(request, reply, auth)) return;
     const input = handoffSettingsSchema.parse(request.body);
-    const latest = await prisma.handoffSetting.findFirst({
-      where: { organizationId: auth.organizationId },
-      orderBy: { version: 'desc' },
-    });
-    const setting = await prisma.handoffSetting.create({
-      data: {
-        organizationId: auth.organizationId,
-        version: (latest?.version ?? 0) + 1,
-        createdBy: auth.userId,
-        allowedCodes: input.allowedCodes,
-        scoreRules: input.scoreRules,
-      },
+    const setting = await createHandoffSetting(prisma, {
+      organizationId: auth.organizationId,
+      userId: auth.userId,
+      allowedCodes: input.allowedCodes,
+      scoreRules: input.scoreRules,
     });
     return reply.code(201).send({ setting });
   });
@@ -203,24 +187,14 @@ export function registerHandoffRoutes(app: FastifyInstance, deps: Deps) {
       const auth = await deps.authorize(request, reply, [UserRole.system_admin, UserRole.admin]);
       if (!auth || !deps.verifyCsrf(request, reply, auth)) return;
       const id = (request.params as { id: string }).id;
-      const setting = await prisma.handoffSetting.findFirst({
-        where: { id, organizationId: auth.organizationId },
+      const setting = await transitionHandoffSetting(prisma, {
+        organizationId: auth.organizationId,
+        settingId: id,
+        userId: auth.userId,
+        action,
       });
       if (!setting) return deps.error(reply, 404, 'NOT_FOUND', '設定がありません');
-      if (action === 'publish')
-        await prisma.handoffSetting.updateMany({
-          where: { organizationId: auth.organizationId, status: 'published' },
-          data: { status: 'archived' },
-        });
-      return {
-        setting: await prisma.handoffSetting.update({
-          where: { id },
-          data:
-            action === 'publish'
-              ? { status: 'published', publishedBy: auth.userId, publishedAt: new Date() }
-              : { status: 'validated' },
-        }),
-      };
+      return { setting };
     });
   app.post('/api/v1/fake-sales-handoff/simulate', async (request, reply) => {
     if (deps.env.NODE_ENV === 'production')
