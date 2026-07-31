@@ -56,6 +56,8 @@ export const stopSchema = z.object({
   scopeId: z.string().min(1).max(200).nullable().optional(),
   reason: z.string().min(3).max(2000),
 });
+
+export type EmergencyStopInput = z.infer<typeof stopSchema>;
 export const allowlistSchema = z.object({
   organizationId: z.string().uuid().optional(),
   phoneNumber: z.string().min(8).max(32),

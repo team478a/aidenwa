@@ -10,13 +10,12 @@ import {
   mockWebhookSchema,
   providerConfigSchema,
   reasonSchema,
-  stopSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
 import { registerApprovalRoutes } from './modules/production-safety/approval/approval.routes.js';
+import { registerEmergencyStopRoutes } from './modules/production-safety/emergency-stop/emergency-stop.routes.js';
 import { registerProductionPolicyRoutes } from './modules/production-safety/policy/production-policy.routes.js';
 import { registerReadinessRoutes } from './modules/production-safety/readiness/readiness.routes.js';
-import { enqueueOutbox } from './outbox.js';
 import type { AuthContext } from './types.js';
 
 type Deps = {
@@ -66,106 +65,7 @@ export function registerStage4Routes(app: FastifyInstance, deps: Deps) {
   registerReadinessRoutes(app, deps);
   registerApprovalRoutes(app, deps);
   registerProductionPolicyRoutes(app, deps);
-  app.get('/api/v1/emergency-stops', async (request, reply) => {
-    const auth = await deps.authorize(request, reply, [
-      UserRole.system_admin,
-      UserRole.admin,
-      UserRole.manager,
-    ]);
-    if (!auth) return;
-    return {
-      stops: await prisma.emergencyStop.findMany({
-        where:
-          auth.role === UserRole.system_admin
-            ? {}
-            : { OR: [{ scope: 'system' }, { organizationId: auth.organizationId }] },
-        orderBy: { activatedAt: 'desc' },
-      }),
-    };
-  });
-  app.post('/api/v1/emergency-stops', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.system_admin, UserRole.admin]);
-    if (!auth) return;
-    const parsed = stopSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    if (parsed.data.scope === 'system' && auth.role !== UserRole.system_admin)
-      return deps.error(reply, 403, 'FORBIDDEN', 'システム停止はシステム管理者のみ実行できます');
-    const organizationId =
-      parsed.data.scope === 'system' ? null : org(auth, parsed.data.organizationId);
-    const stop = await prisma.$transaction(async (tx) => {
-      const created = await tx.emergencyStop.create({
-        data: {
-          organizationId,
-          scope: parsed.data.scope,
-          scopeId: parsed.data.scopeId ?? null,
-          reason: parsed.data.reason,
-          activatedBy: auth.userId,
-        },
-      });
-      await tx.callJob.updateMany({
-        where: {
-          ...(organizationId ? { organizationId } : {}),
-          status: { in: ['queued', 'reserved', 'dispatching'] },
-        },
-        data: {
-          status: 'skipped',
-          errorCode: 'emergency_stop',
-          errorMessage: 'Stage 4A safety stop',
-        },
-      });
-      await enqueueOutbox(tx, {
-        organizationId,
-        eventType: 'twilio-emergency-stop',
-        aggregateType: 'emergency_stop',
-        aggregateId: created.id,
-        payload: {
-          organizationId,
-          scope: created.scope,
-          scopeId: created.scopeId,
-          emergencyStopId: created.id,
-        },
-      });
-      return created;
-    });
-    await audit(
-      request,
-      auth,
-      organizationId ?? auth.organizationId,
-      'emergency_stop.activated',
-      'emergency_stop',
-      stop.id,
-      { scope: stop.scope, scopeId: stop.scopeId, reason: stop.reason },
-    );
-    return reply.code(201).send({ stop });
-  });
-  app.post('/api/v1/emergency-stops/:id/release', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.system_admin]);
-    if (!auth) return;
-    const parsed = reasonSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'REASON_REQUIRED', '解除理由が必要です');
-    const id = (request.params as { id: string }).id;
-    const before = await prisma.emergencyStop.findUnique({ where: { id } });
-    if (!before?.active) return deps.error(reply, 404, 'NOT_FOUND', '有効な停止がありません');
-    const stop = await prisma.emergencyStop.update({
-      where: { id },
-      data: {
-        active: false,
-        releasedBy: auth.userId,
-        releasedAt: new Date(),
-        releaseReason: parsed.data.reason,
-      },
-    });
-    await audit(
-      request,
-      auth,
-      before.organizationId ?? auth.organizationId,
-      'emergency_stop.released',
-      'emergency_stop',
-      id,
-      { reason: parsed.data.reason },
-    );
-    return { stop };
-  });
+  registerEmergencyStopRoutes(app, deps);
 
   app.get('/api/v1/test-call-allowlist', async (request, reply) => {
     const auth = await deps.authorize(request, reply, [
