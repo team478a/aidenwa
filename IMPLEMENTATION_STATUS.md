@@ -712,12 +712,16 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
   - E2E: 8/8 PASS.
   - Web/API/Worker production build: PASS.
   - External Provider/API calls and real telephone calls: 0.
+- GitHub Actions run `30629304033`: PASS.
+  - Production dependency audit and release safety gate: PASS.
+  - Prisma format/validate/generate, empty CI database migrations and seed: PASS.
+  - lint / format / typecheck, 237 tests, E2E 8/8 and all production builds: PASS.
 - Mock-only rehearsal instructions: `docs/operations/release-rehearsal.md`.
 - Go/No-Go decision and remaining operational prerequisites:
   `docs/operations/release-go-no-go.md`.
-- Stage progression condition: GitHub Actions must pass these new gates. Production deployment
-  additionally requires the written operational approvals and provider activation prerequisites
-  listed in the Go/No-Go document.
+- Technical CI condition for the next approved work item: satisfied. Production deployment still
+  requires the written operational approvals and provider activation prerequisites listed in the
+  Go/No-Go document.
 
 ## Stage 4A completion audit
 
