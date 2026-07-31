@@ -3,7 +3,7 @@ export {
   maintenanceDefinitions,
   maintenanceJobNames,
   processMaintenanceJob,
-  recordMaintenanceFailure,
   registerMaintenanceSchedulers,
   type MaintenanceJobName,
 } from './jobs/maintenance/registry.js';
+export { recordMaintenanceFailure } from './jobs/maintenance/failure-reporting.js';
