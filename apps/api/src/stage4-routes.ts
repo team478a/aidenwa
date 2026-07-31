@@ -3,16 +3,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { Prisma, UserRole, evaluateProductionGate, type PrismaClient } from '@sales-ai/database';
-import {
-  gateInputSchema,
-  mockWebhookSchema,
-  providerConfigSchema,
-} from '@sales-ai/validation';
+import { gateInputSchema, mockWebhookSchema } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
 import { registerAllowlistRoutes } from './modules/production-safety/allowlist/allowlist.routes.js';
 import { registerApprovalRoutes } from './modules/production-safety/approval/approval.routes.js';
 import { registerEmergencyStopRoutes } from './modules/production-safety/emergency-stop/emergency-stop.routes.js';
 import { registerProductionPolicyRoutes } from './modules/production-safety/policy/production-policy.routes.js';
+import { registerProviderConfigurationRoutes } from './modules/production-safety/provider-configuration/provider-configuration.routes.js';
 import { registerReadinessRoutes } from './modules/production-safety/readiness/readiness.routes.js';
 import type { AuthContext } from './types.js';
 
@@ -65,50 +62,7 @@ export function registerStage4Routes(app: FastifyInstance, deps: Deps) {
   registerProductionPolicyRoutes(app, deps);
   registerEmergencyStopRoutes(app, deps);
   registerAllowlistRoutes(app, deps);
-  app.put('/api/v1/provider-configurations', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.system_admin]);
-    if (!auth) return;
-    const parsed = providerConfigSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    const organizationId = org(auth, parsed.data.organizationId);
-    const config = await prisma.providerConfiguration.upsert({
-      where: { organizationId_provider: { organizationId, provider: parsed.data.provider } },
-      update: {
-        allowed: parsed.data.allowed,
-        productionEnabled: false,
-        secretReferenceKey: parsed.data.secretReferenceKey,
-        updatedBy: auth.userId,
-      },
-      create: {
-        organizationId,
-        provider: parsed.data.provider,
-        allowed: parsed.data.allowed,
-        productionEnabled: false,
-        secretReferenceKey: parsed.data.secretReferenceKey,
-        updatedBy: auth.userId,
-      },
-    });
-    await audit(
-      request,
-      auth,
-      organizationId,
-      'provider_configuration.updated',
-      'provider_configuration',
-      config.id,
-      {
-        provider: config.provider,
-        allowed: config.allowed,
-        productionEnabled: false,
-        hasSecretReference: Boolean(config.secretReferenceKey),
-      },
-    );
-    return {
-      configuration: {
-        ...config,
-        secretReferenceKey: config.secretReferenceKey ? 'configured' : null,
-      },
-    };
-  });
+  registerProviderConfigurationRoutes(app, deps);
   app.post('/api/v1/production-gate/evaluate', async (request, reply) => {
     const auth = await mutate(request, reply, [
       UserRole.system_admin,
