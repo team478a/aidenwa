@@ -10,13 +10,17 @@ import {
   OpenAIRealtimeProvider,
   PcmuRealtimeBridge,
   signRealtimeSessionToken,
-  verifyRealtimeSessionToken,
   type RealtimeSocket,
 } from '@sales-ai/realtime';
-import { TwilioVoiceProvider } from '@sales-ai/voice-provider';
 import { requestMetadata, writeAudit } from './audit.js';
 import { buildPersistedRealtimePrompt } from './stage4b2-services.js';
 import { realtimeActivationBlockers } from './modules/realtime/media-stream/media-stream.policy.js';
+import {
+  realtimeRawDataText,
+  sanitizeRealtimeCode,
+} from './modules/realtime/protocol/realtime-protocol.js';
+import { verifyMediaSessionToken } from './modules/realtime/token/realtime-token.policy.js';
+import { validateTwilioMediaSignature } from './modules/realtime/token/realtime-token.policy.js';
 
 export { realtimeActivationBlockers } from './modules/realtime/media-stream/media-stream.policy.js';
 
@@ -198,7 +202,7 @@ export function registerStage4B2MediaRoutes(
             const token = event.customParameters.session_token;
             if (!token || !env.REALTIME_SESSION_TOKEN_SECRET)
               throw new Error('REALTIME_TOKEN_INVALID');
-            const payload = verifyRealtimeSessionToken(token, env.REALTIME_SESSION_TOKEN_SECRET);
+            const payload = verifyMediaSessionToken(token, env.REALTIME_SESSION_TOKEN_SECRET);
             if (
               payload.sessionId !== session.id ||
               payload.organizationId !== session.organizationId ||
@@ -289,16 +293,7 @@ async function loadGateContext(prisma: PrismaClient, executionId: string) {
   };
 }
 function validateTwilioSignature(env: ApiEnv, signature: string, url: string) {
-  if (!env.TWILIO_AUTH_TOKEN) return false;
-  const provider = new TwilioVoiceProvider({
-    accountSid: env.TWILIO_ACCOUNT_SID ?? 'AC00000000000000000000000000000000',
-    apiKeySid: env.TWILIO_API_KEY_SID ?? 'SK00000000000000000000000000000000',
-    apiKeySecret: env.TWILIO_API_KEY_SECRET ?? 'disabled',
-    authToken: env.TWILIO_AUTH_TOKEN,
-    estimatedCostMinorPerMinute: env.TWILIO_ESTIMATED_COST_MINOR_PER_MINUTE,
-    currency: 'JPY',
-  });
-  return provider.validateWebhook(signature, url, {});
+  return validateTwilioMediaSignature(env, signature, url);
 }
 function createOpenAISocket(
   url: string,
@@ -358,11 +353,8 @@ async function audit(
   });
 }
 function sanitizeCode(value: string) {
-  return /^[A-Z0-9_]+$/i.test(value) ? value.toLowerCase() : 'internal_error';
+  return sanitizeRealtimeCode(value);
 }
 function rawDataText(data: RawData) {
-  if (typeof data === 'string') return data;
-  if (Array.isArray(data)) return Buffer.concat(data).toString('utf8');
-  if (Buffer.isBuffer(data)) return data.toString('utf8');
-  return Buffer.from(data).toString('utf8');
+  return realtimeRawDataText(data);
 }
