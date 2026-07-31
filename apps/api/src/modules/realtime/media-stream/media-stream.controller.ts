@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import type { RawData } from 'ws';
 import { evaluateProductionGate, type PrismaClient } from '@sales-ai/database';
 import type { ApiEnv } from '@sales-ai/validation';
@@ -7,9 +7,9 @@ import {
   OpenAIRealtimeProvider,
   PcmuRealtimeBridge,
 } from '@sales-ai/realtime';
-import { requestMetadata, writeAudit } from '../../../audit.js';
 import { buildPersistedRealtimePrompt } from '../realtime-simulation/realtime-simulation.service.js';
 import { realtimeActivationBlockers } from './media-stream.policy.js';
+import { auditMediaSession } from './media-stream-audit.service.js';
 import { createMediaStreamTwimlController } from './media-stream-twiml.controller.js';
 import { finishMediaSession, loadMediaGateContext } from './media-stream.repository.js';
 import {
@@ -37,7 +37,7 @@ export function registerMediaStreamControllers(
       preValidation: async (request, reply) => {
         const sessionId = (request.params as { sessionId: string }).sessionId;
         if (realtimeActivationBlockers(env).length) {
-          await audit(prisma, request, undefined, sessionId, 'realtime.gate_rejected');
+          await auditMediaSession(prisma, request, undefined, sessionId, 'realtime.gate_rejected');
           return reply.code(403).send();
         }
         const mediaBaseUrl = env.TWILIO_MEDIA_STREAM_BASE_URL;
@@ -45,13 +45,19 @@ export function registerMediaStreamControllers(
         if (
           !mediaBaseUrl ||
           typeof signature !== 'string' ||
-          !validateTwilioSignature(
+          !validateTwilioMediaSignature(
             env,
             signature,
             new URL(`/api/v1/twilio/realtime/media/${sessionId}`, mediaBaseUrl).toString(),
           )
         ) {
-          await audit(prisma, request, undefined, sessionId, 'realtime.signature_invalid');
+          await auditMediaSession(
+            prisma,
+            request,
+            undefined,
+            sessionId,
+            'realtime.signature_invalid',
+          );
           return reply.code(403).send();
         }
         const session = await prisma.realtimeCallSession.findFirst({
@@ -63,7 +69,13 @@ export function registerMediaStreamControllers(
           return reply.code(403).send();
         const gate = await evaluateProductionGate(prisma, context.gateInput);
         if (!gate.allowed) {
-          await audit(prisma, request, session.organizationId, sessionId, 'realtime.gate_rejected');
+          await auditMediaSession(
+            prisma,
+            request,
+            session.organizationId,
+            sessionId,
+            'realtime.gate_rejected',
+          );
           return reply.code(403).send();
         }
       },
@@ -72,7 +84,7 @@ export function registerMediaStreamControllers(
       const sessionId = (request.params as { sessionId: string }).sessionId;
       const fail = async (code: string) => {
         socket.close(1008, code);
-        await audit(prisma, request, undefined, sessionId, `realtime.${code}`);
+        await auditMediaSession(prisma, request, undefined, sessionId, `realtime.${code}`);
       };
       const blockers = realtimeActivationBlockers(env);
       if (blockers.length) return fail('gate_rejected');
@@ -81,7 +93,10 @@ export function registerMediaStreamControllers(
         `/api/v1/twilio/realtime/media/${sessionId}`,
         env.TWILIO_MEDIA_STREAM_BASE_URL,
       ).toString();
-      if (typeof signature !== 'string' || !validateTwilioSignature(env, signature, externalUrl))
+      if (
+        typeof signature !== 'string' ||
+        !validateTwilioMediaSignature(env, signature, externalUrl)
+      )
         return fail('signature_invalid');
       const session = await prisma.realtimeCallSession.findFirst({
         where: { id: sessionId, status: 'reserved' },
@@ -129,7 +144,13 @@ export function registerMediaStreamControllers(
         if (finalReason) return;
         finalReason = reason;
         await finishMediaSession(prisma, session.id, reason);
-        await audit(prisma, request, session.organizationId, session.id, 'realtime.session.ended');
+        await auditMediaSession(
+          prisma,
+          request,
+          session.organizationId,
+          session.id,
+          'realtime.session.ended',
+        );
         await bridge?.close(reason);
       };
       const resetIdle = () => {
@@ -139,7 +160,7 @@ export function registerMediaStreamControllers(
       const handleMessage = async (data: RawData) => {
         try {
           resetIdle();
-          const raw: unknown = JSON.parse(rawDataText(data));
+          const raw: unknown = JSON.parse(realtimeRawDataText(data));
           const event = normalizeTwilioStreamEvent(raw, env.REALTIME_EVENT_MAX_BYTES);
           if (event.type === 'start') {
             const token = event.customParameters.session_token;
@@ -192,7 +213,7 @@ export function registerMediaStreamControllers(
               where: { id: session.id },
               data: { status: 'active' },
             });
-            await audit(
+            await auditMediaSession(
               prisma,
               request,
               session.organizationId,
@@ -204,7 +225,9 @@ export function registerMediaStreamControllers(
           else if (event.type === 'mark') bridge.acknowledgeMark(event.streamSid, event.name);
           else if (event.type === 'stop') await end('caller_hangup');
         } catch (cause) {
-          await end(cause instanceof Error ? sanitizeCode(cause.message) : 'internal_error');
+          await end(
+            cause instanceof Error ? sanitizeRealtimeCode(cause.message) : 'internal_error',
+          );
           socket.close(1008, 'invalid_media_event');
         }
       };
@@ -216,30 +239,4 @@ export function registerMediaStreamControllers(
       setTimeout(() => void end('max_duration'), env.REALTIME_SESSION_MAX_SECONDS * 1000);
     },
   );
-}
-
-function validateTwilioSignature(env: ApiEnv, signature: string, url: string) {
-  return validateTwilioMediaSignature(env, signature, url);
-}
-async function audit(
-  prisma: PrismaClient,
-  request: FastifyRequest,
-  organizationId: string | undefined,
-  id: string,
-  action: string,
-) {
-  await writeAudit(prisma, {
-    organizationId,
-    action,
-    entityType: 'realtime_call_session',
-    entityId: id,
-    afterData: { reasonCode: action },
-    ...requestMetadata(request),
-  });
-}
-function sanitizeCode(value: string) {
-  return sanitizeRealtimeCode(value);
-}
-function rawDataText(data: RawData) {
-  return realtimeRawDataText(data);
 }
