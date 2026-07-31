@@ -8,13 +8,13 @@ import {
   allowlistSchema,
   gateInputSchema,
   mockWebhookSchema,
-  policySchema,
   providerConfigSchema,
   reasonSchema,
   stopSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
 import { registerApprovalRoutes } from './modules/production-safety/approval/approval.routes.js';
+import { registerProductionPolicyRoutes } from './modules/production-safety/policy/production-policy.routes.js';
 import { registerReadinessRoutes } from './modules/production-safety/readiness/readiness.routes.js';
 import { enqueueOutbox } from './outbox.js';
 import type { AuthContext } from './types.js';
@@ -65,49 +65,7 @@ export function registerStage4Routes(app: FastifyInstance, deps: Deps) {
 
   registerReadinessRoutes(app, deps);
   registerApprovalRoutes(app, deps);
-
-  app.get('/api/v1/production-policy', async (request, reply) => {
-    const auth = await deps.authorize(request, reply, [
-      UserRole.system_admin,
-      UserRole.admin,
-      UserRole.manager,
-    ]);
-    if (!auth) return;
-    const q = request.query as { organizationId?: string };
-    return {
-      policy: await prisma.productionCallPolicy.findUnique({
-        where: { organizationId: org(auth, q.organizationId) },
-      }),
-    };
-  });
-  app.put('/api/v1/production-policy', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.system_admin, UserRole.admin]);
-    if (!auth) return;
-    const parsed = policySchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    const organizationId = org(auth, parsed.data.organizationId);
-    const policy = await prisma.productionCallPolicy.upsert({
-      where: { organizationId },
-      update: { ...parsed.data, organizationId, updatedBy: auth.userId },
-      create: { ...parsed.data, organizationId, updatedBy: auth.userId },
-    });
-    await audit(
-      request,
-      auth,
-      organizationId,
-      'production_policy.updated',
-      'production_call_policy',
-      policy.id,
-      {
-        limits: {
-          daily: policy.dailyCallLimit,
-          hourly: policy.hourlyCallLimit,
-          concurrent: policy.concurrentCallLimit,
-        },
-      },
-    );
-    return { policy };
-  });
+  registerProductionPolicyRoutes(app, deps);
   app.get('/api/v1/emergency-stops', async (request, reply) => {
     const auth = await deps.authorize(request, reply, [
       UserRole.system_admin,

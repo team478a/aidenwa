@@ -48,6 +48,8 @@ export const policySchema = z.object({
   limitedTestCallLimit: z.number().int().positive(),
   mockCostPerCallMinor: z.number().int().nonnegative(),
 });
+
+export type ProductionPolicyInput = z.infer<typeof policySchema>;
 export const stopSchema = z.object({
   organizationId: z.string().uuid().optional(),
   scope: z.enum(['system', 'organization', 'campaign', 'product', 'provider']),
