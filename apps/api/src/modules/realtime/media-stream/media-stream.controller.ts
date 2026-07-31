@@ -11,6 +11,7 @@ import { buildPersistedRealtimePrompt } from '../realtime-simulation/realtime-si
 import { realtimeActivationBlockers } from './media-stream.policy.js';
 import { auditMediaSession } from './media-stream-audit.service.js';
 import { createMediaStreamTwimlController } from './media-stream-twiml.controller.js';
+import { createMediaStreamPreValidation } from './media-stream-prevalidation.controller.js';
 import { finishMediaSession, loadMediaGateContext } from './media-stream.repository.js';
 import {
   createOpenAIRealtimeSocket,
@@ -34,51 +35,7 @@ export function registerMediaStreamControllers(
     '/api/v1/twilio/realtime/media/:sessionId',
     {
       websocket: true,
-      preValidation: async (request, reply) => {
-        const sessionId = (request.params as { sessionId: string }).sessionId;
-        if (realtimeActivationBlockers(env).length) {
-          await auditMediaSession(prisma, request, undefined, sessionId, 'realtime.gate_rejected');
-          return reply.code(403).send();
-        }
-        const mediaBaseUrl = env.TWILIO_MEDIA_STREAM_BASE_URL;
-        const signature = request.headers['x-twilio-signature'];
-        if (
-          !mediaBaseUrl ||
-          typeof signature !== 'string' ||
-          !validateTwilioMediaSignature(
-            env,
-            signature,
-            new URL(`/api/v1/twilio/realtime/media/${sessionId}`, mediaBaseUrl).toString(),
-          )
-        ) {
-          await auditMediaSession(
-            prisma,
-            request,
-            undefined,
-            sessionId,
-            'realtime.signature_invalid',
-          );
-          return reply.code(403).send();
-        }
-        const session = await prisma.realtimeCallSession.findFirst({
-          where: { id: sessionId, status: 'reserved' },
-        });
-        if (!session?.executionId) return reply.code(404).send();
-        const context = await loadMediaGateContext(prisma, session.executionId);
-        if (!context || context.execution.organizationId !== session.organizationId)
-          return reply.code(403).send();
-        const gate = await evaluateProductionGate(prisma, context.gateInput);
-        if (!gate.allowed) {
-          await auditMediaSession(
-            prisma,
-            request,
-            session.organizationId,
-            sessionId,
-            'realtime.gate_rejected',
-          );
-          return reply.code(403).send();
-        }
-      },
+      preValidation: createMediaStreamPreValidation(deps),
     },
     async (socket, request) => {
       const sessionId = (request.params as { sessionId: string }).sessionId;
