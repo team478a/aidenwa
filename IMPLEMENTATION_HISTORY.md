@@ -614,3 +614,15 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30603452487` passed Prisma checks, migrations, seed, lint, format,
   typecheck, 217 tests, E2E 8/8 and all production builds.
 - Database schema and migrations were unchanged; external Provider/API calls and real calls: 0.
+
+## 2026-07-31 — Phase 9 Step 5 Realtime and Media Streams
+
+- Relocated Realtime Simulation and Media Stream implementations into `modules/realtime`, leaving
+  the former Stage service/media paths as compatibility exports.
+- Split Realtime Session and Simulation endpoints, activation Policy, Token/Protocol, TwiML,
+  preValidation, Transport, Repository and audit boundaries.
+- Reduced Media Stream Route to 12 lines and its WebSocket Controller to 195 lines.
+- Added focused boundary, fail-closed, state-mapping and Transport tests.
+- GitHub Actions run `30610188739` passed Prisma checks, migrations, seed, lint, format,
+  typecheck, 227 tests, E2E 8/8 and all production builds.
+- Database schema/migrations unchanged; external OpenAI/Twilio calls and real calls: 0.

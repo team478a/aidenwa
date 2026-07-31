@@ -88,3 +88,11 @@
   - E2E: 8/8 PASS; all production builds PASS.
   - Database schema/migrations unchanged; external Provider/API/real telephone calls: 0.
 - Next target after final CI PASS: Phase 9 Step 5 Realtime / Media Streams modularization.
+- Phase 9 Step 5 Realtime / Media Streams modularization: COMPLETE.
+  - Legacy Realtime service/media paths are compatibility exports only.
+  - Media Stream Route: 12 lines; WebSocket Controller: 195 lines.
+  - Focused Realtime/API boundary tests: 14 files, 24 tests PASS.
+  - Final CI run `30610188739`: PASS with 227 tests, E2E 8/8 and all builds.
+  - External OpenAI/Twilio/Provider communication and real telephone calls: 0.
+  - `stage4b2-routes.ts` retains only Step 6 Followup/Zoom responsibilities plus registrations.
+- Next target: Phase 9 Step 6 Followup / Zoom Phone modularization.

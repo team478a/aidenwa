@@ -655,6 +655,27 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
   - Web/API/Worker production build: PASS.
 - Next Phase 9 step after final PASS: Step 5 Realtime / Media Streams modularization.
 
+## Phase 9 Step 5 — Realtime / Media Streams modularization
+
+- Status: COMPLETE.
+- Realtime Session, Fake Simulation, Media Stream, Token and Protocol now live under
+  `modules/realtime`.
+- `stage4b2-services.ts` and `stage4b2-media.ts` are compatibility-export boundaries only.
+- Media Stream Route is a 12-line registration boundary; WebSocket Controller is 195 lines.
+- Feature flags remain fail-closed. Size/rate/duration/pending-audio limits, barge-in generation
+  control, Production Gate recheck, short-lived tokens and Twilio signature checks are preserved.
+- Raw audio, raw Provider messages, SID, signatures and tokens are not persisted by the new
+  boundaries.
+- Focused Realtime/API boundary tests: 14 files, 24 tests PASS.
+- GitHub Actions run `30610188739`: PASS.
+  - Prisma checks, all migrations and seed: PASS.
+  - lint / format / typecheck: PASS.
+  - Unit/API/Worker/Web configuration: 67 files, 227 tests PASS.
+  - E2E: 8/8 PASS.
+  - All production builds: PASS.
+- Database schema/migrations unchanged; real OpenAI/Twilio calls and real telephone calls: 0.
+- `stage4b2-routes.ts` still contains Followup/Zoom routes assigned to Step 6.
+
 ## Stage 4A completion audit
 
 - 専用UI: 承認作成/申請/判断/停止/再開、Provider設定、利用量/Mock費用、Gate拒否一覧、readinessを実装・build確認済み。

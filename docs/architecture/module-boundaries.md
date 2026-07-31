@@ -212,6 +212,19 @@ modularization is complete.
 `stage4-routes.ts` is registration/composition only. No module enables an external Provider or real
 telephone call.
 
+### Realtime and Media Streams
+
+- `realtime-session`: organization-scoped reads and bounded operator termination.
+- `realtime-simulation`: Fake Provider execution and persisted normalized events.
+- `media-stream`: fail-closed activation, TwiML, preValidation, WebSocket orchestration,
+  persistence, audit and Transport adapter boundaries.
+- `token`: Twilio signature and short-lived Session Token verification.
+- `protocol`: bounded raw-data conversion and sanitized failure codes.
+
+The former `stage4b2-services.ts` and `stage4b2-media.ts` paths are compatibility exports only.
+Media Stream Routes contain registration only. No raw audio or raw Provider message persistence
+was introduced.
+
 ### Worker bootstrap
 
 - `create-prisma.ts`: database client construction.
