@@ -96,3 +96,30 @@
   - External OpenAI/Twilio/Provider communication and real telephone calls: 0.
   - `stage4b2-routes.ts` retains only Step 6 Followup/Zoom responsibilities plus registrations.
 - Next target: Phase 9 Step 6 Followup / Zoom Phone modularization.
+
+## Steps 6–8 completion
+
+- Step 6 Followup / Zoom Phone: COMPLETE at implementation commit `5055879`.
+  - Workflow, eligibility, assignment, attempt, KPI and Fake Zoom sync are independent modules.
+  - `stage4b2-routes.ts` and legacy Stage 4C service are compatibility/composition boundaries.
+  - CI run `30611316524`: 230 tests, E2E 8/8 and production builds PASS.
+- Step 7 Handoff: COMPLETE at implementation commit `47ebf25`.
+  - Finalization transaction, pure deterministic scoring, append-only feedback, settings and
+    quality aggregation are separated.
+  - Sensitive summary rejection, low-confidence review, OptOut-first, FAX exclusion and Followup
+    creation remain covered by the seven Stage 4D tests.
+  - CI run `30611765950`: all required checks PASS.
+- Step 8 Worker Maintenance: implementation COMPLETE at commit `2770056`.
+  - `maintenance.ts` is compatibility-only; registry, failure reporting and 12 job handlers are
+    independent.
+  - Scheduler names/cadences, stable scheduler IDs, upsert, Redis lock, timeout, retry/backoff,
+    retained failure history, Incident dedup and graceful shutdown are unchanged.
+  - Final implementation CI run `30612122483`: PASS.
+- Final local verification:
+  - Prisma generate / format / validate: PASS.
+  - lint / format / typecheck: PASS.
+  - Unit/API/Worker/Web: 70 files, 237 tests PASS.
+  - E2E: 8/8 PASS.
+  - Web/API/Worker production build: PASS.
+- Database schema/migrations: unchanged.
+- External Provider/API communication and real telephone calls: 0.

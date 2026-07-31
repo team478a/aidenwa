@@ -19,3 +19,8 @@ This layering now covers Import and all Stage 2 sales-data domains: Companies, C
 Numbers, Tags, Sales Lists and OptOuts. `stage2-routes.ts` only composes these modules. Shared
 typed DomainError mapping remains a later common-core slice; existing public error adapters are
 retained for compatibility.
+
+Phase 9 extends the same direction to Followup and Handoff. Stage entry files register domain
+routes only; Followup workflow/assignment/attempt/KPI and Handoff
+finalization/scoring/feedback/settings/quality own their respective business responsibilities.
+Legacy Stage service paths remain compatibility exports.

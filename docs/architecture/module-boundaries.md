@@ -235,3 +235,14 @@ was introduced.
 - `main.ts`: validated environment composition.
 
 `apps/worker/src/index.ts` is a two-line entry point. Phase 8 modularization is complete.
+
+### Followups and Handoffs
+
+- `modules/followups`: workflow state/eligibility, assignment, attempt, KPI and disabled/Fake Zoom
+  synchronization.
+- `modules/handoffs`: finalization transaction, pure scoring, append-only feedback, settings and
+  quality aggregation.
+- `stage4b2-routes.ts` and `stage4d-routes.ts`: registration/composition boundaries.
+- Legacy Stage 4C/4D service paths: compatibility exports only.
+
+External Zoom/AI actions remain disabled; these modules do not initiate real calls.

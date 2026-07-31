@@ -1,19 +1,36 @@
 # Implementation Status
 
-- Current stage: Maintainability remediation Phase 9 — remaining domain modularization in progress
-- Release state: Phase 1–8 and additional fixes 5.1–5.4 verified; Phase 9 in progress; external
-  providers disabled
+- Current stage: Maintainability remediation Phase 9 — COMPLETE
+- Release state: Phase 1–8, additional fixes 5.1–5.4 and Phase 9 Steps 1–8 verified locally;
+  external providers disabled
 - Updated: 2026-07-31
 - Latest verification:
-  - Unit/API/Worker/Web configuration: 201 tests PASS in CI
+  - Unit/API/Worker/Web configuration: 237 tests PASS locally
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30597838915` PASS for Phase 9 Stage 3 AI Agents split
-  - Latest implementation commit: `0bdc012` (Stage 3 AI Agents modularization)
-  - Latest documentation commit: `e25a4d1` (Stage 3 Products record)
+  - GitHub Actions: run `30612122483` PASS for Phase 9 completion
+  - Latest implementation commit: `2770056` (Worker Maintenance job split)
+  - Latest documentation commit: pending this update
   - External Provider/API/real telephone calls: 0
 
 ## Maintainability remediation Phase 9
+
+- Step 6 — Followup / Zoom Phone modularization: COMPLETE
+  - Workflow state, eligibility, assignment, attempt, KPI and Fake Zoom sync are independent.
+  - `stage4b2-routes.ts` is registration/composition only.
+  - CI run `30611316524`: 230 tests, E2E 8/8, production builds and all checks PASS.
+- Step 7 — Handoff modularization: COMPLETE
+  - Finalization, pure scoring, append-only feedback, settings and quality are independent.
+  - `stage4d-routes.ts` is registration/composition only.
+  - CI run `30611765950`: all checks PASS.
+- Step 8 — Worker Maintenance modularization: implementation COMPLETE
+  - `maintenance.ts` is a 9-line compatibility boundary.
+  - Registry, failure reporting and all 12 stable maintenance jobs are independent.
+  - Local verification: 237 tests, E2E 8/8 and all production builds PASS.
+  - CI run `30612122483`: Prisma checks, migrations, seed, lint, format, typecheck, 237 tests,
+    E2E 8/8 and production builds PASS.
+- Database schema/migrations: unchanged.
+- External Provider/API/real telephone calls: 0.
 
 - Step 1 — Mock Call main-process formal relocation: COMPLETE
 - Step 2 — Stage 2 sales-data modularization: COMPLETE
@@ -45,12 +62,12 @@
 - CI run `30590755086`: 199 unit/API tests, E2E 8/8 and all verification steps PASS.
 - Phase 9 Step 2 is complete; Step 3 is now in progress.
 
-### Phase 9 Step 3 — Stage 3 settings/campaign modularization
+### Phase 9 Step 3 — Stage 3 settings/campaign modularization (historical checkpoint)
 
-- Status: IN PROGRESS
+- Status: COMPLETE
 - Products: COMPLETE
 - AI Agents: COMPLETE
-- Scenarios / Knowledge / Campaigns / Campaign Targets / Call Jobs: pending
+- Scenarios / Knowledge / Campaigns / Campaign Targets / Call Jobs: COMPLETE
 - Products and AI Agents use dedicated Route, Controller, Service, Repository and Policy layers.
 - Published Product Versions remain immutable and version numbering remains unchanged.
 - AI Agent organization scope, admin/manager mutation roles, CSRF checks, version numbering,

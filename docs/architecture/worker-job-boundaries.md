@@ -20,3 +20,8 @@ shutdown preserves ordered cleanup and first-failure propagation.
 Appointment maintenance delegates to three explicit jobs: atomic hold expiration, deduplicated
 upcoming notification and bounded event cleanup. The existing `maintenance:appointment` scheduler
 name, hourly cadence and public `maintainAppointments` compatibility entry point remain unchanged.
+
+Phase 9 moved Maintenance orchestration to `jobs/maintenance/registry.ts`, failure handling to
+`failure-reporting.ts`, and each of the 12 stable scheduled operations to its own Job file.
+`maintenance.ts` is compatibility-only. Scheduler names/frequencies, upsert IDs, Redis locking,
+timeouts, retries/backoff, retained history and Incident deduplication are unchanged.

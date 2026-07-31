@@ -626,3 +626,20 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - GitHub Actions run `30610188739` passed Prisma checks, migrations, seed, lint, format,
   typecheck, 227 tests, E2E 8/8 and all production builds.
 - Database schema/migrations unchanged; external OpenAI/Twilio calls and real calls: 0.
+
+## 2026-07-31 — Phase 9 Steps 6–8 remaining modularization
+
+- Split Followup into Workflow, Eligibility, Assignment, Attempt, KPI and Fake Zoom Sync modules;
+  reduced `stage4b2-routes.ts` to registration/composition.
+- Split Handoff into Finalization, pure Scoring, append-only Feedback, Settings and Quality
+  modules; reduced `stage4d-routes.ts` to registration/composition.
+- Split Worker Maintenance into a Registry, Failure Reporting and 12 independent stable Job
+  handlers; reduced `maintenance.ts` to a 9-line compatibility boundary.
+- Added focused compatibility, pure-layer, append-only, independent-dispatch and fail-closed
+  boundary tests.
+- Followup CI run `30611316524` and Handoff CI run `30611765950` passed all checks.
+- Final local verification passed Prisma generate/format/validate, lint, format, typecheck,
+  70 test files/237 tests, E2E 8/8 and all production builds.
+- Final implementation CI run `30612122483` passed Prisma checks, all migrations, seed, lint,
+  format, typecheck, 237 tests, E2E 8/8 and all production builds.
+- Database schema/migrations unchanged; external Provider/API/real telephone calls: 0.

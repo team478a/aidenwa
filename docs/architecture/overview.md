@@ -28,3 +28,7 @@ compatibility-only exports.
 Worker startup now composes validated environment, Prisma, Redis/Queue, an explicit Job Registry,
 idempotent schedulers and graceful shutdown from dedicated bootstrap modules. Unknown Job names
 produce a payload-free sanitized warning.
+
+Phase 9 completes remaining domain modularization for Realtime, Followup, Handoff and Worker
+Maintenance. External feature flags remain disabled, Fake/Mock providers remain the test default,
+and no modularization step changes the database schema or public API contracts.
