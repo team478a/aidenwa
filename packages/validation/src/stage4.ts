@@ -31,6 +31,8 @@ export const approvalInputSchema = z.object({
   approvalBasis: z.string().min(3).max(4000),
   notes: z.string().max(4000).default(''),
 });
+
+export type ApprovalInput = z.infer<typeof approvalInputSchema>;
 export const reasonSchema = z.object({ reason: z.string().min(3).max(2000) });
 export const policySchema = z.object({
   organizationId: z.string().uuid().optional(),

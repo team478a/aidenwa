@@ -6,7 +6,6 @@ import { Prisma, UserRole, evaluateProductionGate, type PrismaClient } from '@sa
 import { normalizePhoneNumber } from '@sales-ai/shared/stage2';
 import {
   allowlistSchema,
-  approvalInputSchema,
   gateInputSchema,
   mockWebhookSchema,
   policySchema,
@@ -15,6 +14,7 @@ import {
   stopSchema,
 } from '@sales-ai/validation';
 import { requestMetadata, writeAudit } from './audit.js';
+import { registerApprovalRoutes } from './modules/production-safety/approval/approval.routes.js';
 import { registerReadinessRoutes } from './modules/production-safety/readiness/readiness.routes.js';
 import { enqueueOutbox } from './outbox.js';
 import type { AuthContext } from './types.js';
@@ -64,148 +64,7 @@ export function registerStage4Routes(app: FastifyInstance, deps: Deps) {
     });
 
   registerReadinessRoutes(app, deps);
-
-  app.get('/api/v1/production-approvals', async (request, reply) => {
-    const auth = await deps.authorize(request, reply, [
-      UserRole.system_admin,
-      UserRole.admin,
-      UserRole.manager,
-    ]);
-    if (!auth) return;
-    const q = request.query as { organizationId?: string };
-    return {
-      approvals: await prisma.productionCallApproval.findMany({
-        where: { organizationId: org(auth, q.organizationId) },
-        orderBy: { updatedAt: 'desc' },
-      }),
-    };
-  });
-  app.post('/api/v1/production-approvals', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.system_admin, UserRole.admin]);
-    if (!auth) return;
-    const parsed = approvalInputSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    const organizationId = org(auth, parsed.data.organizationId);
-    const products = await prisma.product.count({
-      where: { organizationId, id: { in: parsed.data.productIds } },
-    });
-    if (products !== parsed.data.productIds.length)
-      return deps.error(reply, 400, 'PRODUCT_SCOPE_INVALID', '承認対象商材が組織内に存在しません');
-    const approval = await prisma.productionCallApproval.create({
-      data: { ...parsed.data, organizationId, createdBy: auth.userId, status: 'draft' },
-    });
-    await audit(
-      request,
-      auth,
-      organizationId,
-      'production_approval.created',
-      'production_call_approval',
-      approval.id,
-      {
-        status: approval.status,
-        targetRegions: approval.targetRegions,
-        productIds: approval.productIds,
-      },
-    );
-    return reply.code(201).send({ approval });
-  });
-  app.patch('/api/v1/production-approvals/:id', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.system_admin, UserRole.admin]);
-    if (!auth) return;
-    const parsed = approvalInputSchema.safeParse(request.body);
-    if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
-    const organizationId = org(auth, parsed.data.organizationId);
-    const id = (request.params as { id: string }).id;
-    const before = await prisma.productionCallApproval.findFirst({
-      where: { id, organizationId, status: { in: ['draft', 'rejected'] } },
-    });
-    if (!before) return deps.error(reply, 404, 'NOT_FOUND', '編集可能な承認情報がありません');
-    const approval = await prisma.productionCallApproval.update({
-      where: { id },
-      data: { ...parsed.data, organizationId, status: 'draft', decisionReason: null },
-    });
-    await audit(
-      request,
-      auth,
-      organizationId,
-      'production_approval.updated',
-      'production_call_approval',
-      id,
-      { status: approval.status },
-      { status: before.status },
-    );
-    return { approval };
-  });
-  app.post('/api/v1/production-approvals/:id/submit', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.system_admin, UserRole.admin]);
-    if (!auth) return;
-    const id = (request.params as { id: string }).id;
-    const before = await prisma.productionCallApproval.findFirst({
-      where: { id, organizationId: auth.organizationId, status: 'draft' },
-    });
-    if (!before) return deps.error(reply, 404, 'NOT_FOUND', '申請可能な承認情報がありません');
-    const approval = await prisma.productionCallApproval.update({
-      where: { id },
-      data: { status: 'reviewing', requestedBy: auth.userId, requestedAt: new Date() },
-    });
-    await audit(
-      request,
-      auth,
-      auth.organizationId,
-      'production_approval.submitted',
-      'production_call_approval',
-      id,
-      { status: approval.status },
-    );
-    return { approval };
-  });
-  for (const [path, status, action] of [
-    ['approve', 'approved', 'approved'],
-    ['reject', 'rejected', 'rejected'],
-    ['suspend', 'suspended', 'suspended'],
-    ['resume', 'approved', 'resumed'],
-  ] as const) {
-    app.post(`/api/v1/production-approvals/:id/${path}`, async (request, reply) => {
-      const auth = await mutate(request, reply, [UserRole.system_admin]);
-      if (!auth) return;
-      const parsed = reasonSchema.safeParse(request.body);
-      if (!parsed.success) return deps.error(reply, 400, 'REASON_REQUIRED', '理由が必要です');
-      const id = (request.params as { id: string }).id;
-      const before = await prisma.productionCallApproval.findUnique({ where: { id } });
-      if (!before) return deps.error(reply, 404, 'NOT_FOUND', '承認情報がありません');
-      const allowed =
-        path === 'approve'
-          ? before.status === 'reviewing'
-          : path === 'resume'
-            ? before.status === 'suspended'
-            : path === 'suspend'
-              ? before.status === 'approved'
-              : before.status === 'reviewing';
-      if (!allowed) return deps.error(reply, 409, 'INVALID_TRANSITION', '承認状態遷移が不正です');
-      if (path === 'approve' && (!before.expiresAt || before.expiresAt <= new Date()))
-        return deps.error(reply, 409, 'APPROVAL_INCOMPLETE', '承認期限が不正です');
-      const approval = await prisma.productionCallApproval.update({
-        where: { id },
-        data: {
-          status,
-          decidedBy: auth.userId,
-          decidedAt: new Date(),
-          decisionReason: parsed.data.reason,
-        },
-      });
-      await audit(
-        request,
-        auth,
-        before.organizationId,
-        `production_approval.${action}`,
-        'production_call_approval',
-        id,
-        { status, reason: parsed.data.reason },
-        { status: before.status },
-      );
-      return { approval };
-    });
-  }
+  registerApprovalRoutes(app, deps);
 
   app.get('/api/v1/production-policy', async (request, reply) => {
     const auth = await deps.authorize(request, reply, [
