@@ -3,6 +3,9 @@ import { resolveApiInternalUrl } from './config/api-internal-url';
 
 const apiInternalUrl = resolveApiInternalUrl(process.env);
 const nextConfig: NextConfig = {
+  // ESLint runs as an explicit required CI step with the Next.js plugin. Avoid the legacy
+  // Next 15 build-time detector, which does not recognize our repository-root flat config.
+  eslint: { ignoreDuringBuilds: true },
   rewrites() {
     return Promise.resolve([
       { source: '/backend/:path*', destination: `${apiInternalUrl}/api/v1/:path*` },

@@ -51,6 +51,11 @@
 ## Warnings and remaining items
 
 - Next.js reports that its ESLint plugin is not detected by the shared flat ESLint configuration. Repository ESLint itself passes with zero findings and the production build succeeds; this is classified as a non-blocking configuration warning.
+
+Resolution (2026-08-01): the matching Next.js plugin and Core Web Vitals rules now run in the
+required repository lint gate. Duplicate build-time linting is disabled, and production builds no
+longer emit this warning.
+
 - Prisma reports that a newer major version is available. No major dependency upgrade was attempted during stabilization.
 - GitHub Actions, deployment, production migration and external-provider verification remain pending and require separate authorization and credentials.
 - Existing repository files have no commit/`HEAD`; no commit, push or pull request was created.

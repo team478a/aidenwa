@@ -253,7 +253,8 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - Stage 4D DB対象テスト: 7/7 PASS（tool拒否、score、冪等、禁止情報、組織境界、FAX、opt-out、low confidenceを包含）
 - Stage 4B/Realtime/HumanCalling主要回帰を含む選択テスト: 32/32 PASS（5 files）
 - Prisma format / validate / generate、Stage 4C・4D migration適用、lint、typecheck: PASS
-- Web/API/Worker production build: PASS（WebはNext.js ESLint plugin未検出の警告のみ）
+- Web/API/Worker production build: PASS（当時のNext.js ESLint plugin未検出警告は
+  2026-08-01に解消済み）
 - `VOICE_PROVIDER=mock`および全外部Feature Flag falseを維持。外部通信・実電話: 0回
 - format check: PASS（既存4ファイルの書式差分も整形）。全Unit、全E2E、空DB全migration、GitHub CIは未実行でPASS扱いにしない
 
@@ -749,6 +750,19 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
 - External Provider/API calls and real telephone calls: 0.
 - Operational owners, environment monitoring/backups, tabletop exercise and legal approvals
   remain external No-Go conditions.
+
+## CI runtime and Next.js lint warning remediation
+
+- Status: COMPLETE.
+- Added `@next/eslint-plugin-next` 15.5.21 to the repository-root flat ESLint configuration,
+  including Core Web Vitals rules; App Router does not run the Pages-only link rule.
+- Next.js build-time lint duplication is disabled because the explicit repository-wide `pnpm
+lint` remains a required CI gate before build.
+- GitHub Actions were upgraded from Node.js 20-based checkout/setup actions to
+  `actions/checkout@v6`, `pnpm/action-setup@v6` and `actions/setup-node@v6`; application tests
+  remain pinned to Node.js 22.
+- Local lint, format, typecheck and production build: PASS; the previous Next.js plugin warning is
+  absent.
 
 ## Stage 4A completion audit
 

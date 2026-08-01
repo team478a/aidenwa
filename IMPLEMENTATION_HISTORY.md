@@ -680,3 +680,14 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Removed the temporary worktree, database dump and isolated database; verified no rehearsal
   database remained.
 - External Provider/API calls and real telephone calls: 0.
+
+## 2026-08-01 — CI runtime and Next.js lint warning cleanup
+
+- Enabled the matching Next.js 15.5.21 ESLint plugin and Core Web Vitals rules in the shared flat
+  configuration.
+- Kept repository lint as a required standalone CI gate and disabled the duplicate legacy
+  Next.js build-time lint detector, removing its false plugin warning.
+- Upgraded checkout, pnpm setup and Node setup GitHub Actions to v6 Node.js 24 runtimes while
+  retaining Node.js 22 for application verification.
+- Local lint, format, typecheck and all production builds passed without the prior warning.
+- External Provider/API calls and real telephone calls: 0.
