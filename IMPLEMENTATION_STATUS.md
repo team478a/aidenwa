@@ -1,17 +1,39 @@
 # Implementation Status
 
-- Current stage: Maintainability remediation Phase 9 — COMPLETE
-- Release state: Phase 1–8, additional fixes 5.1–5.4 and Phase 9 Steps 1–8 verified locally and
-  in CI; external providers disabled
-- Updated: 2026-07-31
+- Current stage: Phase 10 — Release Readiness
+- Release state: Phase 1–9 verified; Mock-only release readiness in progress; production
+  deployment No-Go; external providers disabled
+- Updated: 2026-08-01
 - Latest verification:
   - Unit/API/Worker/Web configuration: 237 tests PASS locally
   - E2E: 8/8 PASS
   - Production build: Web/API/Worker PASS
-  - GitHub Actions: run `30612122483` PASS for Phase 9 completion
-  - Latest implementation commit: `2770056` (Worker Maintenance job split)
-  - Latest documentation commit: `bdf1b1b` (Phase 9 completion record)
+  - GitHub Actions: run `30695971040` PASS
+  - Latest implementation commit: `60ad15a`
+  - Dependency Audit: PASS; no known high/critical production vulnerability
+  - Release Gate: PASS
+  - Backup / Restore Rehearsal: PASS
+  - Previous Release Rollback Rehearsal: PASS
+  - Next.js ESLint warning: resolved
   - External Provider/API/real telephone calls: 0
+
+## Phase 10 — Release Readiness
+
+- Status: IN PROGRESS; only Work A and Work B are started by the Phase 10 instruction.
+- Work A progress documents: COMPLETE for the `60ad15a` / CI `30695971040` baseline.
+- Work B Production Environment Design: DOCUMENTED, not provisioned.
+  - Recommended cloud/region: AWS `ap-northeast-1` (Tokyo), pending approval.
+  - Web/API/Worker: separate ECS Fargate services in private subnets.
+  - PostgreSQL: private RDS PostgreSQL Multi-AZ.
+  - Redis/BullMQ: private ElastiCache Serverless for Valkey.
+  - Public boundary: Route 53 / ACM / WAF / ALB only.
+  - Secrets, logs and monitoring: Secrets Manager, CloudWatch and SNS; destinations/owners TBD.
+  - Deployment: GitHub Actions OIDC, immutable same-commit images and one-shot migration task.
+  - Rollback: previous image, no down migration, Queue/Outbox/Audit/Emergency Stop preserved.
+- Gate A Mock-only production: NO-GO until infrastructure, HTTPS, centralized logging,
+  monitoring, alert test and named operational owners have evidence.
+- Gate B external Provider activation: NO-GO and out of scope.
+- External Provider/API calls and real telephone calls during Phase 10: 0.
 
 ## Maintainability remediation Phase 9
 

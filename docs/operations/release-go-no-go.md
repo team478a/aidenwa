@@ -2,11 +2,25 @@
 
 ## Current decision
 
-`NO-GO_FOR_PRODUCTION_DEPLOYMENT`
+`NO-GO_FOR_MOCK_ONLY_PRODUCTION_DEPLOYMENT`
 
-The repository is eligible for a Mock-only release rehearsal. Production deployment remains
-No-Go until the operational items below have named owners and environment-specific evidence.
-External Provider activation is a separate approval and is not authorized by this document.
+`NO-GO_FOR_EXTERNAL_PROVIDER_ACTIVATION`
+
+The repository is eligible for a Mock-only release rehearsal. Gate A deployment remains No-Go
+until the AWS design is approved and provisioned with named owners and environment evidence.
+Gate B external Provider activation is separate, remains prohibited in Phase 10 and is never
+implied by Gate A.
+
+## Current evidence baseline
+
+- Candidate baseline: `60ad15a`.
+- GitHub Actions: `30695971040` PASS.
+- Dependency Audit and `pnpm release:check`: PASS.
+- Backup/restore and previous-release rollback rehearsals: PASS.
+- Next.js ESLint warning: resolved.
+- External Provider/API calls and real telephone calls: 0.
+- Proposed topology: AWS `ap-northeast-1`; no resource has been authorized or provisioned by this
+  decision.
 
 ## Technical Go conditions
 
@@ -26,6 +40,10 @@ External Provider activation is a separate approval and is not authorized by thi
 - Centralized logs, health alerts, queue/maintenance alerts and on-call routing are active.
 - Emergency Stop and rollback operators have completed a tabletop exercise.
 - Data retention, privacy, terms, customer consent and telephone-sales legal review are approved.
+
+Gate A additionally requires every required item in
+`docs/operations/production-environment-checklist.md` to have environment-specific evidence. An
+unchecked item or `TBD` owner keeps Gate A No-Go.
 
 ## Automatic No-Go conditions
 

@@ -691,3 +691,15 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   retaining Node.js 22 for application verification.
 - Local lint, format, typecheck and all production builds passed without the prior warning.
 - External Provider/API calls and real telephone calls: 0.
+
+## 2026-08-01 — Phase 10 release readiness started
+
+- Updated status and Go/No-Go records to the verified `60ad15a` baseline and GitHub Actions run
+  `30695971040`.
+- Documented the proposed AWS Tokyo Mock-only production topology, public/private network
+  boundaries, application/data/observability flows and environment acceptance checklist.
+- Kept the proposal explicitly unprovisioned with all owner names, alert destinations, domain and
+  approved budget marked TBD rather than inferred.
+- Separated Gate A Mock-only deployment from Gate B external Provider activation; both remain
+  No-Go pending their own evidence, and Gate B remains prohibited in Phase 10.
+- External Provider/API calls and real telephone calls: 0.

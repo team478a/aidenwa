@@ -1,5 +1,10 @@
 # Phase 9 remaining modularization verification
 
+Phase 9 is closed. Its final verified baseline is carried into Phase 10 Release Readiness at
+commit `60ad15a`, GitHub Actions run `30695971040` PASS. Dependency audit, release gate,
+backup/restore rehearsal and previous-release rollback rehearsal pass; the historical Next.js
+ESLint warning is resolved. Phase 10 does not reopen or extend Phase 9 modularization.
+
 ## Baseline
 
 - Base commit: `c123eab`.
