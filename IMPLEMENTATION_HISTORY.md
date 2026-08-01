@@ -669,3 +669,14 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Executed the rehearsal successfully: 17 source migrations and 17 restored migrations; the
   temporary dump and both disposable databases were removed.
 - External Provider/API calls and real telephone calls: 0.
+
+## 2026-08-01 — Previous-release rollback rehearsal
+
+- Restored a current database backup into the fixed disposable
+  `sales_ai_rollback_rehearsal` database and checked out previous candidate `dadf6b3` in a
+  detached temporary worktree.
+- Verified the previous release accepted all 17 existing migrations without reversal, started
+  Web/API/Worker, passed E2E 8/8 and completed all production builds.
+- Removed the temporary worktree, database dump and isolated database; verified no rehearsal
+  database remained.
+- External Provider/API calls and real telephone calls: 0.

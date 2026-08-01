@@ -732,9 +732,23 @@ Stage 4B-1のFake Twilio自動検証を追加済み。実Twilio API通信と実�
   backup, restore into a second database and completed-migration count equality.
 - Result: source migrations 17, restored migrations 17, external calls 0.
 - Temporary dump and both rehearsal databases are removed in the cleanup path.
-- Remaining release work requiring external action: previous-release startup rehearsal,
-  environment-specific monitoring/backup ownership, operational/legal approvals and separately
-  approved Provider activation.
+- Remaining release work requiring external action: environment-specific monitoring/backup
+  ownership, operational/legal approvals and separately approved Provider activation.
+
+## Previous-release startup and rollback rehearsal
+
+- Status: COMPLETE locally.
+- Candidate `f7261cc` was checked against previous release candidate `dadf6b3` in a detached,
+  temporary worktree.
+- The current rehearsal database was dumped and restored into the isolated
+  `sales_ai_rollback_rehearsal` database; the old release found all 17 migrations applied and no
+  pending migration.
+- Old-release Web/API/Worker startup and health-backed E2E: 8/8 PASS.
+- Old-release production build: PASS.
+- Cleanup verified: temporary worktree, dump and isolated database remaining 0.
+- External Provider/API calls and real telephone calls: 0.
+- Operational owners, environment monitoring/backups, tabletop exercise and legal approvals
+  remain external No-Go conditions.
 
 ## Stage 4A completion audit
 
