@@ -703,3 +703,18 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Separated Gate A Mock-only deployment from Gate B external Provider activation; both remain
   No-Go pending their own evidence, and Gate B remains prohibited in Phase 10.
 - External Provider/API calls and real telephone calls: 0.
+
+## 2026-08-01 — Railway Mock-only deployment preparation
+
+- Selected Railway Singapore as the low-cost Gate A environment for synthetic/test data; the AWS
+  Tokyo topology remains an unprovisioned higher-assurance alternative for later real-data use.
+- Added separate Web/API/Worker Dockerfiles and Railway service configurations. Only Web is intended
+  to receive a public HTTPS domain; API, Worker, PostgreSQL and Redis remain private.
+- Added API pre-deploy migration, health/restart settings, Mock-only variable template, deployment
+  order, rollback boundary and environment acceptance checklist.
+- Extended `pnpm release:check` so the Railway template must disable all eight external integration
+  flags, select Mock VoiceProvider and omit external Provider credential variables.
+- Did not provision a paid Railway project, create a domain, inject secrets, seed production,
+  connect to an external Provider or start a real telephone call.
+- Verified `pnpm release:check`, lint, typecheck, 237 unit/API/Worker tests, the Railway-context
+  production build and clean Docker builds for Web/API/Worker. Prisma OpenSSL detection is clean.
