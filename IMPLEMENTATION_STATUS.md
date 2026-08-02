@@ -1,8 +1,8 @@
 # Implementation Status
 
 - Current stage: Phase 10 — Release Readiness
-- Release state: Phase 1–9 verified; Mock-only release readiness in progress; production
-  deployment No-Go; external providers disabled
+- Release state: Phase 1–9 verified; Railway Mock-only deployment configuration prepared;
+  environment provisioning remains No-Go; external providers disabled
 - Updated: 2026-08-01
 - Latest verification:
   - Unit/API/Worker/Web configuration: 237 tests PASS locally
@@ -16,22 +16,26 @@
   - Previous Release Rollback Rehearsal: PASS
   - Next.js ESLint warning: resolved
   - External Provider/API/real telephone calls: 0
+  - Railway preparation verification: release gate, lint, typecheck, 237 unit/API/Worker tests,
+    Railway-context production build and Web/API/Worker Docker image builds PASS
 
 ## Phase 10 — Release Readiness
 
 - Status: IN PROGRESS; only Work A and Work B are started by the Phase 10 instruction.
 - Work A progress documents: COMPLETE for the `60ad15a` / CI `30695971040` baseline.
-- Work B Production Environment Design: DOCUMENTED, not provisioned.
-  - Recommended cloud/region: AWS `ap-northeast-1` (Tokyo), pending approval.
-  - Web/API/Worker: separate ECS Fargate services in private subnets.
-  - PostgreSQL: private RDS PostgreSQL Multi-AZ.
-  - Redis/BullMQ: private ElastiCache Serverless for Valkey.
-  - Public boundary: Route 53 / ACM / WAF / ALB only.
-  - Secrets, logs and monitoring: Secrets Manager, CloudWatch and SNS; destinations/owners TBD.
-  - Deployment: GitHub Actions OIDC, immutable same-commit images and one-shot migration task.
-  - Rollback: previous image, no down migration, Queue/Outbox/Audit/Emergency Stop preserved.
-- Gate A Mock-only production: NO-GO until infrastructure, HTTPS, centralized logging,
-  monitoring, alert test and named operational owners have evidence.
+- Work B Mock-only Environment Design: RAILWAY CONFIGURATION PREPARED, not provisioned.
+  - Selected platform/region: Railway Singapore for low-cost synthetic-data validation.
+  - Services: Web (public HTTPS), private API/Worker, Railway PostgreSQL and Redis.
+  - Dockerfiles and service configuration: `deploy/railway/`.
+  - API pre-deploy runs `prisma migrate deploy`; production seed is prohibited.
+  - Release gate checks the Railway template keeps all eight external flags false, uses Mock
+    VoiceProvider and omits Provider credentials.
+  - Operator guide: `docs/operations/railway-mock-only-deployment.md`.
+  - Local verification: all three Railway Docker images build successfully with Node 22 and
+    OpenSSL; no external Provider credential was supplied.
+  - Rollback: previous deployment, no down migration, Queue/Outbox/Audit/Emergency Stop preserved.
+- Gate A Mock-only production: NO-GO until the Railway project, HTTPS, backups, logs, monitoring,
+  alert test, named owners and full operator-flow evidence exist.
 - Gate B external Provider activation: NO-GO and out of scope.
 - External Provider/API calls and real telephone calls during Phase 10: 0.
 

@@ -1,63 +1,62 @@
-# Production environment checklist — Gate A Mock-only
+# Production environment checklist — Gate A Mock-only (Railway)
 
-`TBD` or unchecked required items mean No-Go. Record evidence links without secret or customer
-data.
+`TBD` or an unchecked required item means No-Go. Record evidence without secrets, cookies,
+customer data, telephone numbers or CSV contents.
 
 ## Decisions and ownership
 
-- [ ] AWS account and `ap-northeast-1` approved.
-- [ ] Release, Infrastructure, Database, Security and Privacy owners named.
+- [ ] Railway Pro project and Singapore region approved; monthly budget/usage alert approved.
+- [ ] Synthetic/test data only is approved; Privacy confirms real personal/customer data is absent.
+- [ ] Release, Operations, Database, Security and Privacy owners named.
 - [ ] Emergency Stop and Rollback operators named with substitutes.
-- [ ] On-call Primary/Secondary and Legal Approver named with contact routes.
-- [ ] AWS Pricing Calculator estimate and monthly budget approved.
+- [ ] On-call Primary/Secondary named with tested contact routes.
 
-## Network and compute
+## Services and network
 
-- [ ] Two-AZ VPC has public ALB subnets, private application subnets and isolated DB subnets.
-- [ ] Route 53 DNS and ACM certificate validate the approved production domain.
-- [ ] WAF managed baseline and rate limit are enabled and tested.
-- [ ] Web/API have only ALB inbound; Worker has no public endpoint.
-- [ ] RDS/Valkey have no public access and accept only owning ECS security groups.
-- [ ] Provider egress is absent; all external flags are false.
+- [ ] `web`, `api`, `worker`, `Postgres` and `Redis` services exist in one project.
+- [ ] Only Web has a public Railway HTTPS domain.
+- [ ] API, Worker, PostgreSQL and Redis remain private; API is reachable as
+      `api.railway.internal:3001` only.
+- [ ] Web `/login`, API `/health` and Worker heartbeat checks pass.
+- [ ] Provider egress is unused; all external flags are false and Provider credentials are absent.
 
 ## Data and secrets
 
-- [ ] RDS PostgreSQL Multi-AZ, encryption, automated backup and PITR configured.
-- [ ] Valkey private TLS endpoint and persistence/eviction alarms configured.
-- [ ] S3 import/evidence buckets use KMS, versioning, public-access block and lifecycle policies.
-- [ ] Secrets Manager inventory and service-scoped IAM policies approved.
-- [ ] No production `.env`, long-lived GitHub AWS key or Provider credential exists.
-- [ ] Production startup fails safely when any required secret is absent.
+- [ ] PostgreSQL automated backup/restore capability and retention are approved and tested.
+- [ ] Redis persistence/failure behavior and queue recovery procedure are approved.
+- [ ] Required application secrets are independent random Railway variables.
+- [ ] No production `.env`, Provider credential or secret value exists in Git/build arguments.
+- [ ] Production startup fails safely when a required secret is absent or unsafe.
+- [ ] CSV temporary artifacts are removed after success, failure and retention expiry.
 
 ## Logging and monitoring
 
-- [ ] Web/API/Worker/ALB/WAF logs reach approved CloudWatch Log Groups.
-- [ ] Retention, KMS encryption, access roles and redaction tests are approved.
-- [ ] Health, HTTP 5xx/latency, DB, Valkey, Queue, Outbox and Worker alarms exist.
-- [ ] SNS alert route reaches Primary and Secondary; P1 test evidence is attached.
-- [ ] CloudTrail and deployment audit records are enabled.
+- [ ] Web/API/Worker logs are available with approved retention and access.
+- [ ] Redaction evidence excludes passwords, cookies, sessions, CSRF, Provider secrets and CSV data.
+- [ ] HTTP 5xx/latency, database, Redis, Queue, Outbox and Worker-health alerts exist.
+- [ ] Alert route reaches Primary and Secondary; one P1 test is recorded.
+- [ ] Railway deployment/audit records are retained for the approved period.
 
 ## Deployment
 
-- [ ] Candidate commit and successful CI run fixed in release evidence.
+- [ ] Candidate commit and successful CI run are fixed in release evidence.
 - [ ] `pnpm audit --prod --audit-level high` and `pnpm release:check` pass.
-- [ ] Immutable Web/API/Worker images share the same `RELEASE_COMMIT`.
-- [ ] Backup succeeds before the one-shot migration task.
+- [ ] Web/API/Worker deployments use the same `RELEASE_COMMIT`.
+- [ ] Backup succeeds before API `preDeployCommand` runs `prisma migrate deploy`.
 - [ ] Production deployment does not execute seed.
-- [ ] Rolling health checks and automatic deployment rollback are configured.
-- [ ] Previous-release image starts against restored forward schema.
+- [ ] Health checks and restart policies are enabled and tested.
+- [ ] Previous deployment starts against the restored forward schema.
 
-## Safety evidence
+## Safety and operator evidence
 
 - [ ] `VOICE_PROVIDER=mock`; eight external integration flags are false.
 - [ ] Twilio/OpenAI/Zoom/calendar credentials are absent.
-- [ ] External Provider/API call count is 0.
-- [ ] Real telephone call count is 0.
-- [ ] Backup/restore and rollback rehearsal pass.
-- [ ] Emergency Stop tabletop and Mock-only production rehearsal pass.
+- [ ] External Provider/API call count is 0; real telephone call count is 0.
+- [ ] Backup/restore, rollback and Emergency Stop rehearsals pass.
+- [ ] Admin completes company → CSV → scenario → campaign → Mock call → follow-up → appointment.
 
 ## Current decision
 
-`NO-GO_FOR_MOCK_ONLY_PRODUCTION_DEPLOYMENT`: design is documented, but AWS resources, HTTPS,
-owners, monitoring, alert delivery and environment evidence are not yet approved or provisioned.
-`NO-GO_FOR_EXTERNAL_PROVIDER_ACTIVATION` remains unconditional for Phase 10.
+`NO-GO_FOR_MOCK_ONLY_PRODUCTION_DEPLOYMENT`: Railway code/configuration is prepared, but the
+project, HTTPS domain, backups, monitoring, alerts, owners and end-to-end operator evidence have not
+yet been provisioned or approved. `NO-GO_FOR_EXTERNAL_PROVIDER_ACTIVATION` remains unconditional.

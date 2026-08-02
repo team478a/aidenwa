@@ -7,7 +7,8 @@
 `NO-GO_FOR_EXTERNAL_PROVIDER_ACTIVATION`
 
 The repository is eligible for a Mock-only release rehearsal. Gate A deployment remains No-Go
-until the AWS design is approved and provisioned with named owners and environment evidence.
+until the Railway Mock-only design is approved and provisioned with named owners and environment
+evidence.
 Gate B external Provider activation is separate, remains prohibited in Phase 10 and is never
 implied by Gate A.
 
@@ -19,8 +20,8 @@ implied by Gate A.
 - Backup/restore and previous-release rollback rehearsals: PASS.
 - Next.js ESLint warning: resolved.
 - External Provider/API calls and real telephone calls: 0.
-- Proposed topology: AWS `ap-northeast-1`; no resource has been authorized or provisioned by this
-  decision.
+- Selected Gate A topology: Railway Singapore; deployment configuration is prepared but no
+  resource has been authorized or provisioned by this decision.
 
 ## Technical Go conditions
 
