@@ -23,6 +23,7 @@
     "db:generate": "pnpm --filter @sales-ai/database db:generate",
     "db:migrate": "pnpm --filter @sales-ai/database db:migrate",
     "db:seed": "pnpm --filter @sales-ai/database db:seed",
+    "db:bootstrap-admin": "pnpm --filter @sales-ai/database db:bootstrap-admin",
     "db:seed:e2e": "cross-env SEED_SYSTEM_ADMIN_PASSWORD=Stage4A-E2E-System! SEED_ADMIN_PASSWORD=Stage1-E2E-Admin! SEED_MANAGER_PASSWORD=Stage1-E2E-Manager! SEED_SALES_PASSWORD=Stage1-E2E-Sales! pnpm db:seed",
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down"

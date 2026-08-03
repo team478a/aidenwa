@@ -21,6 +21,12 @@
 
 ## Phase 10 — Release Readiness
 
+- Railway Mock-only runtime: Web/API/Worker/PostgreSQL/Redis Online; public Web login smoke PASS.
+- Initial administrator bootstrap: implemented as `pnpm db:bootstrap-admin`; requires explicit
+  confirmation and ephemeral inputs, refuses non-empty identity databases, and records a
+  secret-free audit event. Railway execution remains pending.
+- Operator test procedure: `docs/testing/railway-mock-only-operator-test.md`.
+
 - Status: IN PROGRESS; only Work A and Work B are started by the Phase 10 instruction.
 - Work A progress documents: COMPLETE for the `60ad15a` / CI `30695971040` baseline.
 - Work B Mock-only Environment Design: RAILWAY CONFIGURATION PREPARED, not provisioned.
