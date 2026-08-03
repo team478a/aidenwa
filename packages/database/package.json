@@ -11,11 +11,13 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:bootstrap-admin": "tsx prisma/bootstrap-admin.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@prisma/client": "^6.8.2",
-    "@sales-ai/shared": "workspace:*"
+    "@sales-ai/shared": "workspace:*",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "prisma": "^6.8.2",

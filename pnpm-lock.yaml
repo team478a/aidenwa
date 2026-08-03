@@ -168,6 +168,9 @@ importers:
       '@sales-ai/shared':
         specifier: workspace:*
         version: link:../shared
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       prisma:
         specifier: ^6.8.2

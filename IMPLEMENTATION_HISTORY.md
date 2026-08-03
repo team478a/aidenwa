@@ -1,5 +1,10 @@
 # Implementation History
 
+- Added a Railway Mock-only operator test guide covering the initial-admin prerequisite,
+  synthetic-data-only login-to-appointment flow, evidence recording, safety checks and stop
+  conditions. Added a confirmation-gated, transaction-locked, audit-recorded one-time initial
+  administrator bootstrap command that refuses databases containing any organization or user.
+
 ## 2026-07-29 — Phase 8 progress documentation alignment
 
 - Updated the status header to the verified Phase 8 incremental-modularization state.
