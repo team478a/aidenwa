@@ -3,7 +3,11 @@ import type { FastifyInstance } from 'fastify';
 import { Prisma, UserRole } from '@sales-ai/database';
 import { requestMetadata, writeAudit } from '../../audit.js';
 import type { ProductControllerDependencies } from '../products/product.controller.js';
-import { createCallProfileSchema, createIntegrationClientSchema } from './schemas.js';
+import {
+  createCallProfileSchema,
+  createIntegrationClientSchema,
+  updateIntegrationClientSchema,
+} from './schemas.js';
 import { issueApiKey } from './security.js';
 import { deriveWebhookSecret, hashWebhookSecret } from '@sales-ai/shared';
 import { enqueueOutbox } from '../../outbox.js';
@@ -30,6 +34,7 @@ export function registerIntegrationAdminRoutes(
         allowedScopes: input.allowedScopes,
         allowedCallProfiles: input.allowedCallProfiles,
         allowedIps: input.allowedIps,
+        rateLimitPerMinute: input.rateLimitPerMinute,
         dailyCallLimit: input.dailyCallLimit,
         concurrentCallLimit: input.concurrentCallLimit,
         ...(input.webhookEndpoint
@@ -66,6 +71,106 @@ export function registerIntegrationAdminRoutes(
       ...(input.webhookEndpoint ? { webhookSecret } : {}),
     });
   });
+
+  app.patch<{ Params: { id: string } }>(
+    '/api/v1/integrations/clients/:id',
+    async (request, reply) => {
+      const auth = await deps.authorize(request, reply, [UserRole.admin]);
+      if (!auth || !deps.verifyCsrf(request, reply, auth)) return;
+      const input = updateIntegrationClientSchema.parse(request.body);
+      const before = await deps.prisma.integrationClient.findFirst({
+        where: { id: request.params.id, organizationId: auth.organizationId },
+        select: {
+          id: true,
+          name: true,
+          environment: true,
+          status: true,
+          apiKeyPrefix: true,
+          allowedScopes: true,
+          allowedCallProfiles: true,
+          allowedIps: true,
+          rateLimitPerMinute: true,
+          dailyCallLimit: true,
+          concurrentCallLimit: true,
+          webhookEndpoint: true,
+        },
+      });
+      if (!before) return deps.error(reply, 404, 'NOT_FOUND', 'Integration Clientが見つかりません');
+      if (input.allowedCallProfiles) {
+        const count = await deps.prisma.callProfile.count({
+          where: {
+            organizationId: auth.organizationId,
+            environment: before.environment,
+            publicId: { in: input.allowedCallProfiles },
+          },
+        });
+        if (count !== new Set(input.allowedCallProfiles).size)
+          return deps.error(
+            reply,
+            400,
+            'VALIDATION_ERROR',
+            '利用できないCall Profileが含まれています',
+          );
+      }
+      const client = await deps.prisma.integrationClient.update({
+        where: { id: before.id },
+        data: input,
+        select: {
+          id: true,
+          name: true,
+          environment: true,
+          status: true,
+          apiKeyPrefix: true,
+          allowedScopes: true,
+          allowedCallProfiles: true,
+          allowedIps: true,
+          rateLimitPerMinute: true,
+          dailyCallLimit: true,
+          concurrentCallLimit: true,
+          webhookEndpoint: true,
+        },
+      });
+      await writeAudit(deps.prisma, {
+        organizationId: auth.organizationId,
+        userId: auth.userId,
+        action: 'integration_client.updated',
+        entityType: 'integration_client',
+        entityId: client.id,
+        beforeData: before,
+        afterData: client,
+        ...requestMetadata(request),
+      });
+      return { client };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/integrations/clients/:id/rotate-api-key',
+    async (request, reply) => {
+      const auth = await deps.authorize(request, reply, [UserRole.admin]);
+      if (!auth || !deps.verifyCsrf(request, reply, auth)) return;
+      const before = await deps.prisma.integrationClient.findFirst({
+        where: { id: request.params.id, organizationId: auth.organizationId },
+      });
+      if (!before) return deps.error(reply, 404, 'NOT_FOUND', 'Integration Clientが見つかりません');
+      const key = issueApiKey(before.environment);
+      const client = await deps.prisma.integrationClient.update({
+        where: { id: before.id },
+        data: { apiKeyHash: key.apiKeyHash, apiKeyPrefix: key.apiKeyPrefix },
+        select: { id: true, apiKeyPrefix: true, updatedAt: true },
+      });
+      await writeAudit(deps.prisma, {
+        organizationId: auth.organizationId,
+        userId: auth.userId,
+        action: 'integration_client.api_key_rotated',
+        entityType: 'integration_client',
+        entityId: client.id,
+        afterData: { apiKeyPrefix: client.apiKeyPrefix },
+        ...requestMetadata(request),
+      });
+      return { client, apiKey: key.apiKey };
+    },
+  );
 
   app.post('/api/v1/integrations/call-profiles', async (request, reply) => {
     const auth = await deps.authorize(request, reply, [UserRole.admin]);
@@ -150,6 +255,9 @@ export function registerIntegrationAdminRoutes(
           status: true,
           apiKeyPrefix: true,
           allowedScopes: true,
+          allowedCallProfiles: true,
+          allowedIps: true,
+          rateLimitPerMinute: true,
           dailyCallLimit: true,
           concurrentCallLimit: true,
           webhookEndpoint: true,

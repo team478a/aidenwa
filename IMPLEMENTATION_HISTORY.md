@@ -778,3 +778,13 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Applied all 21 migrations and passed Prisma format/validate/generate, lint, typecheck, all 258
   unit/API/Worker tests, 8 Mock-only Playwright E2E tests and the production build.
 - Kept production activation, external Provider access and real telephone calls unavailable.
+
+## 2026-08-14 — Headless API admin operations
+
+- Added organization-scoped Integration Client updates, suspend/resume and one-time API Key
+  rotation with immediate invalidation of the previous Key.
+- Added safe audit records that contain only API Key prefixes and never hashes or plaintext Keys.
+- Added Sandbox Call Profile authoring and Client operation controls to the external integration
+  screen without exposing Production activation.
+- Added a Sandbox API quickstart covering profile discovery, Mock Call execution and Key incident
+  handling.

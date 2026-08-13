@@ -891,3 +891,16 @@ lint` remains a required CI gate before build.
 - Remaining v1 admin operations: Client configuration editing, API key reissue and Call Profile
   authoring UI are not yet exposed in the browser. Existing admin creation APIs remain available.
 - External Provider/API calls and real telephone calls: 0.
+
+## Headless API admin operations
+
+- Status: COMPLETE LOCALLY; GitHub publication pending.
+- Admins can update organization-scoped Client Profile assignments, per-minute rate limit, daily
+  limit and concurrent limit, and can suspend/resume a Client.
+- API Key rotation invalidates the previous Key immediately and displays the replacement once.
+  Audit data contains only the Key prefix, never plaintext or the stored hash.
+- Admin UI can create active Sandbox Call Profiles from published internal Version IDs. Production
+  activation remains unavailable.
+- Added `docs/api/headless-sandbox-quickstart.md` for external Sandbox consumers.
+- Verification: lint PASS, typecheck PASS, 75 files / 260 tests PASS, production build PASS.
+- External Provider/API calls and real telephone calls: 0.
