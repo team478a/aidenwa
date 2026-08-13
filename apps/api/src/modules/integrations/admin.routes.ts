@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { Prisma, UserRole } from '@sales-ai/database';
 import { requestMetadata, writeAudit } from '../../audit.js';
@@ -5,6 +6,7 @@ import type { ProductControllerDependencies } from '../products/product.controll
 import { createCallProfileSchema, createIntegrationClientSchema } from './schemas.js';
 import { issueApiKey } from './security.js';
 import { deriveWebhookSecret, hashWebhookSecret } from '@sales-ai/shared';
+import { enqueueOutbox } from '../../outbox.js';
 
 export function registerIntegrationAdminRoutes(
   app: FastifyInstance,
@@ -134,5 +136,80 @@ export function registerIntegrationAdminRoutes(
     });
     return reply.code(201).send({ profile });
   });
+
+  app.get('/api/v1/integrations/clients', async (request, reply) => {
+    const auth = await deps.authorize(request, reply, [UserRole.admin]);
+    if (!auth) return;
+    return {
+      clients: await deps.prisma.integrationClient.findMany({
+        where: { organizationId: auth.organizationId },
+        select: {
+          id: true,
+          name: true,
+          environment: true,
+          status: true,
+          apiKeyPrefix: true,
+          allowedScopes: true,
+          dailyCallLimit: true,
+          concurrentCallLimit: true,
+          webhookEndpoint: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    };
+  });
+
+  app.get('/api/v1/integrations/call-profiles', async (request, reply) => {
+    const auth = await deps.authorize(request, reply, [UserRole.admin]);
+    if (!auth) return;
+    return {
+      profiles: await deps.prisma.callProfile.findMany({
+        where: { organizationId: auth.organizationId },
+        orderBy: { createdAt: 'desc' },
+      }),
+    };
+  });
+
+  app.get('/api/v1/integrations/webhook-deliveries', async (request, reply) => {
+    const auth = await deps.authorize(request, reply, [UserRole.admin]);
+    if (!auth) return;
+    return {
+      deliveries: await deps.prisma.externalWebhookDelivery.findMany({
+        where: { webhookEvent: { organizationId: auth.organizationId } },
+        include: {
+          webhookEvent: { select: { publicId: true, eventType: true, createdAt: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      }),
+    };
+  });
+
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/integrations/webhook-deliveries/:id/retry',
+    async (request, reply) => {
+      const auth = await deps.authorize(request, reply, [UserRole.admin]);
+      if (!auth || !deps.verifyCsrf(request, reply, auth)) return;
+      const delivery = await deps.prisma.externalWebhookDelivery.findFirst({
+        where: { id: request.params.id, webhookEvent: { organizationId: auth.organizationId } },
+        include: { webhookEvent: true },
+      });
+      if (!delivery) return deps.error(reply, 404, 'NOT_FOUND', 'Deliveryが見つかりません');
+      await deps.prisma.$transaction(async (tx) => {
+        await tx.externalWebhookDelivery.update({
+          where: { id: delivery.id },
+          data: { status: 'retrying', nextAttemptAt: new Date(), failureCode: null },
+        });
+        await enqueueOutbox(tx, {
+          organizationId: auth.organizationId,
+          eventType: 'webhook-delivery',
+          aggregateType: 'external_webhook_delivery',
+          aggregateId: `${delivery.id}:manual:${randomUUID()}`,
+          payload: { deliveryId: delivery.id },
+        });
+      });
+      return reply.code(202).send({ status: 'retrying' });
+    },
+  );
 }
-import { randomUUID } from 'node:crypto';

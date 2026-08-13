@@ -55,6 +55,7 @@ const links: ReadonlyArray<{ href: string; label: string; roles: readonly Role[]
   { href: '/teams', label: 'チーム', roles: ['admin', 'manager'] },
   { href: '/organization', label: '組織設定', roles: ['admin'] },
   { href: '/audit-logs', label: '監査ログ', roles: ['admin'] },
+  { href: '/integrations', label: '外部連携', roles: ['admin'] },
 ];
 
 export default function AdminLayout({ children }: Readonly<{ children: ReactNode }>) {

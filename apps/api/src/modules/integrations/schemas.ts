@@ -84,3 +84,30 @@ export const externalCallSchema = z
     ]),
   })
   .strict();
+
+export const externalCallBatchSchema = z
+  .object({
+    external_batch_id: z.string().min(1).max(200),
+    call_profile_id: z.string().regex(/^cp_[a-z0-9_]+_v\d+$/u),
+    targets: z
+      .array(
+        z
+          .object({
+            external_call_id: z.string().min(1).max(200),
+            external_customer_id: z.string().min(1).max(200),
+            phone: z.string().min(6).max(30),
+            company_name: z.string().max(200).optional(),
+            contact_name: z.string().max(200).optional(),
+            context: contextSchema.default({}),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(500),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      new Set(value.targets.map((target) => target.external_call_id)).size === value.targets.length,
+    'external_call_id must be unique within a batch',
+  );

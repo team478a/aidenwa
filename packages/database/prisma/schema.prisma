@@ -102,28 +102,31 @@ enum ExternalCallStatus {
 }
 
 model IntegrationClient {
-  id                  String                      @id @default(uuid()) @db.Uuid
-  organizationId      String                      @map("organization_id") @db.Uuid
+  id                  String                       @id @default(uuid()) @db.Uuid
+  organizationId      String                       @map("organization_id") @db.Uuid
   name                String
   environment         IntegrationEnvironment
-  status              IntegrationStatus           @default(active)
-  apiKeyHash          String                      @unique @map("api_key_hash")
-  apiKeyPrefix        String                      @map("api_key_prefix")
-  allowedScopes       Json                        @default("[]") @map("allowed_scopes")
-  allowedCallProfiles Json                        @default("[]") @map("allowed_call_profiles")
-  allowedIps          Json                        @default("[]") @map("allowed_ips")
-  rateLimitPerMinute  Int                         @default(120) @map("rate_limit_per_minute")
-  dailyCallLimit      Int                         @default(100) @map("daily_call_limit")
-  concurrentCallLimit Int                         @default(1) @map("concurrent_call_limit")
-  createdBy           String                      @map("created_by") @db.Uuid
-  createdAt           DateTime                    @default(now()) @map("created_at")
-  updatedAt           DateTime                    @updatedAt @map("updated_at")
-  organization        Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  status              IntegrationStatus            @default(active)
+  apiKeyHash          String                       @unique @map("api_key_hash")
+  apiKeyPrefix        String                       @map("api_key_prefix")
+  allowedScopes       Json                         @default("[]") @map("allowed_scopes")
+  allowedCallProfiles Json                         @default("[]") @map("allowed_call_profiles")
+  allowedIps          Json                         @default("[]") @map("allowed_ips")
+  rateLimitPerMinute  Int                          @default(120) @map("rate_limit_per_minute")
+  dailyCallLimit      Int                          @default(100) @map("daily_call_limit")
+  concurrentCallLimit Int                          @default(1) @map("concurrent_call_limit")
+  createdBy           String                       @map("created_by") @db.Uuid
+  createdAt           DateTime                     @default(now()) @map("created_at")
+  updatedAt           DateTime                     @updatedAt @map("updated_at")
+  organization        Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   calls               ExternalCallExecution[]
   idempotencyRecords  ExternalIdempotencyRecord[]
-  webhookEndpoint     String?                     @map("webhook_endpoint")
-  webhookSecretHash   String?                     @map("webhook_secret_hash")
+  webhookEndpoint     String?                      @map("webhook_endpoint")
+  webhookSecretHash   String?                      @map("webhook_secret_hash")
   webhookEvents       ExternalWebhookEvent[]
+  callBatches         ExternalCallBatch[]
+  externalReferences  ExternalReference[]
+  rateLimitBuckets    IntegrationRateLimitBucket[]
 
   @@index([organizationId, status, environment])
   @@map("integration_clients")
@@ -180,6 +183,7 @@ model ExternalCallExecution {
   organizationId      String                 @map("organization_id") @db.Uuid
   integrationClientId String                 @map("integration_client_id") @db.Uuid
   callProfileId       String                 @map("call_profile_id") @db.Uuid
+  batchId             String?                @map("batch_id") @db.Uuid
   externalCallId      String                 @map("external_call_id")
   externalCustomerId  String                 @map("external_customer_id")
   idempotencyKey      String                 @map("idempotency_key") @db.Uuid
@@ -202,11 +206,59 @@ model ExternalCallExecution {
   integrationClient   IntegrationClient      @relation(fields: [integrationClientId], references: [id], onDelete: Restrict)
   callProfile         CallProfile            @relation(fields: [callProfileId], references: [id], onDelete: Restrict)
   webhookEvents       ExternalWebhookEvent[]
+  batch               ExternalCallBatch?     @relation(fields: [batchId], references: [id], onDelete: Restrict)
 
   @@unique([integrationClientId, idempotencyKey])
   @@unique([integrationClientId, externalCallId])
   @@index([organizationId, status, scheduledAt])
   @@map("external_call_executions")
+}
+
+model ExternalCallBatch {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  publicId            String                  @unique @map("public_id")
+  organizationId      String                  @map("organization_id") @db.Uuid
+  integrationClientId String                  @map("integration_client_id") @db.Uuid
+  callProfileId       String                  @map("call_profile_id") @db.Uuid
+  externalBatchId     String                  @map("external_batch_id")
+  acceptedCount       Int                     @default(0) @map("accepted_count")
+  rejectedCount       Int                     @default(0) @map("rejected_count")
+  status              String                  @default("accepted")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  integrationClient   IntegrationClient       @relation(fields: [integrationClientId], references: [id], onDelete: Restrict)
+  calls               ExternalCallExecution[]
+
+  @@unique([integrationClientId, externalBatchId])
+  @@index([organizationId, createdAt])
+  @@map("external_call_batches")
+}
+
+model ExternalReference {
+  id                  String            @id @default(uuid()) @db.Uuid
+  integrationClientId String            @map("integration_client_id") @db.Uuid
+  resourceType        String            @map("resource_type")
+  externalId          String            @map("external_id")
+  internalId          String            @map("internal_id") @db.Uuid
+  createdAt           DateTime          @default(now()) @map("created_at")
+  integrationClient   IntegrationClient @relation(fields: [integrationClientId], references: [id], onDelete: Restrict)
+
+  @@unique([integrationClientId, resourceType, externalId])
+  @@index([integrationClientId, internalId])
+  @@map("external_references")
+}
+
+model IntegrationRateLimitBucket {
+  id                  String            @id @default(uuid()) @db.Uuid
+  integrationClientId String            @map("integration_client_id") @db.Uuid
+  operation           String
+  windowStartedAt     DateTime          @map("window_started_at")
+  requestCount        Int               @default(0) @map("request_count")
+  integrationClient   IntegrationClient @relation(fields: [integrationClientId], references: [id], onDelete: Restrict)
+
+  @@unique([integrationClientId, operation, windowStartedAt])
+  @@index([windowStartedAt])
+  @@map("integration_rate_limit_buckets")
 }
 
 enum ExternalWebhookDeliveryStatus {

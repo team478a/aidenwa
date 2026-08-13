@@ -868,3 +868,26 @@ lint` remains a required CI gate before build.
 - Repository verification: lint PASS, typecheck PASS, 75 files / 256 tests PASS and production
   build PASS. Phase API-2 Playwright E2E remains 8/8 PASS; Phase API-3 adds no browser UI.
 - External Provider/API calls and real telephone calls: 0.
+
+## Headless AI Call Engine — Phase API-4
+
+- Status: COMPLETE LOCALLY.
+- Added batch Call creation/read APIs with a maximum of 500 targets, duplicate target rejection,
+  organization/Profile isolation, OptOut filtering, Emergency Stop/call-window checks and final
+  daily/concurrent capacity limits.
+- Added persistent per-minute Integration Client rate-limit buckets for read, write, single Call
+  and Batch categories.
+- Added organization-scoped External References and batch-to-call relationships without copying
+  the external customer master.
+- Added admin list APIs for Integration Clients, Call Profiles and Webhook Delivery history, plus
+  manual Webhook retry.
+- Added the admin `外部連携` screen for Sandbox Client issuance, one-time credential display,
+  active Sandbox Call Profile assignment, Client/Profile monitoring and failed Webhook retry.
+  Production activation is not exposed.
+- Dedicated empty PostgreSQL database: all 21 migrations through Phase API-4 PASS. Prisma format,
+  validate and generate: PASS.
+- Repository verification: lint PASS, typecheck PASS, 75 files / 258 unit/API/Worker tests PASS,
+  production build PASS and Mock-only Playwright E2E 8/8 PASS.
+- Remaining v1 admin operations: Client configuration editing, API key reissue and Call Profile
+  authoring UI are not yet exposed in the browser. Existing admin creation APIs remain available.
+- External Provider/API calls and real telephone calls: 0.

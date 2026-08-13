@@ -768,3 +768,13 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
 - Applied all 20 migrations and passed lint, typecheck, all 256 unit/API/Worker tests and the
   production build.
 - External Provider/API calls and real telephone calls: 0.
+
+## 2026-08-13 — Headless AI Call Engine Phase API-4
+
+- Added bounded Batch Call persistence/API processing, External References and persistent
+  Integration Client rate-limit buckets.
+- Added admin monitoring APIs and an `外部連携` screen for Sandbox Client issuance, Call Profile
+  assignment/visibility and Webhook Delivery retry.
+- Applied all 21 migrations and passed Prisma format/validate/generate, lint, typecheck, all 258
+  unit/API/Worker tests, 8 Mock-only Playwright E2E tests and the production build.
+- Kept production activation, external Provider access and real telephone calls unavailable.

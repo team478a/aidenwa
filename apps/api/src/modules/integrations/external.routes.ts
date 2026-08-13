@@ -4,7 +4,7 @@ import { createExternalCallWebhook, Prisma, type PrismaClient } from '@sales-ai/
 import { inCallableWindow } from '@sales-ai/shared';
 import { normalizePhoneNumber } from '@sales-ai/shared/stage2';
 import { enqueueOutbox } from '../../outbox.js';
-import { externalCallSchema, type IntegrationScope } from './schemas.js';
+import { externalCallBatchSchema, externalCallSchema, type IntegrationScope } from './schemas.js';
 import { idempotencyKeyPattern, runIdempotentAction } from './idempotency.js';
 import { hashApiKey, requestFingerprint } from './security.js';
 
@@ -14,6 +14,8 @@ type ClientContext = {
   organizationId: string;
   environment: 'sandbox' | 'production';
   allowedCallProfiles: string[];
+  dailyCallLimit: number;
+  concurrentCallLimit: number;
 };
 
 function externalError(reply: FastifyReply, status: number, code: string, message: string) {
@@ -54,6 +56,25 @@ async function authenticate(
     externalError(reply, 403, 'FORBIDDEN_SCOPE', 'この操作は許可されていません');
     return;
   }
+  const operation = scope.includes('call-batches')
+    ? 'batch'
+    : scope === 'calls:create'
+      ? 'single-call'
+      : scope.endsWith(':read')
+        ? 'read'
+        : 'write';
+  const limit =
+    operation === 'batch'
+      ? Math.min(client.rateLimitPerMinute, 10)
+      : operation === 'single-call'
+        ? Math.min(client.rateLimitPerMinute, 60)
+        : operation === 'read'
+          ? Math.max(client.rateLimitPerMinute, 300)
+          : client.rateLimitPerMinute;
+  if (!(await consumeRateLimit(deps.prisma, client.id, operation, limit))) {
+    externalError(reply, 429, 'RATE_LIMIT_EXCEEDED', 'リクエスト上限に達しました');
+    return;
+  }
   const allowedIps = client.allowedIps as string[];
   if (allowedIps.length && !allowedIps.includes(request.ip)) {
     externalError(reply, 403, 'INVALID_API_KEY', '接続元が許可されていません');
@@ -64,6 +85,8 @@ async function authenticate(
     organizationId: client.organizationId,
     environment: client.environment,
     allowedCallProfiles: client.allowedCallProfiles as string[],
+    dailyCallLimit: client.dailyCallLimit,
+    concurrentCallLimit: client.concurrentCallLimit,
   };
 }
 
@@ -273,6 +296,212 @@ export function registerExternalIntegrationRoutes(app: FastifyInstance, deps: Ex
     }
   });
 
+  app.post('/api/external/v1/call-batches', async (request, reply) => {
+    const client = await authenticate(deps, request, reply, 'call-batches:create');
+    if (!client) return;
+    const idempotencyKey = request.headers['idempotency-key'];
+    if (typeof idempotencyKey !== 'string' || !idempotencyKeyPattern.test(idempotencyKey))
+      return externalError(reply, 400, 'VALIDATION_ERROR', 'Idempotency-Key UUIDが必要です');
+    const parsed = externalCallBatchSchema.safeParse(request.body);
+    if (!parsed.success)
+      return externalError(reply, 400, 'VALIDATION_ERROR', '入力内容を確認してください');
+    const input = parsed.data;
+    if (!client.allowedCallProfiles.includes(input.call_profile_id))
+      return externalError(
+        reply,
+        403,
+        'CALL_PROFILE_NOT_AVAILABLE',
+        'Call Profileを利用できません',
+      );
+    if (client.environment === 'production')
+      return externalError(
+        reply,
+        403,
+        'PRODUCTION_GATE_DENIED',
+        'Production連携はまだ有効化されていません',
+      );
+    const profile = await deps.prisma.callProfile.findFirst({
+      where: {
+        organizationId: client.organizationId,
+        publicId: input.call_profile_id,
+        environment: 'sandbox',
+        status: 'active',
+      },
+    });
+    if (!profile)
+      return externalError(
+        reply,
+        404,
+        'CALL_PROFILE_NOT_AVAILABLE',
+        'Call Profileを利用できません',
+      );
+    if (
+      !inCallableWindow(
+        new Date(),
+        profile.callableWeekdays as number[],
+        profile.callableStartTime,
+        profile.callableEndTime,
+        profile.timezone,
+      )
+    )
+      return externalError(reply, 409, 'CALL_WINDOW_DENIED', '架電可能時間外です');
+    const normalizedTargets = input.targets.map((target) => ({
+      target,
+      phone: normalizePhoneNumber(target.phone),
+    }));
+    if (normalizedTargets.some(({ phone }) => !phone.isValid))
+      return externalError(reply, 422, 'VALIDATION_ERROR', '無効な電話番号が含まれています');
+    const prior = await deps.prisma.externalCallBatch.findUnique({
+      where: {
+        integrationClientId_externalBatchId: {
+          integrationClientId: client.id,
+          externalBatchId: input.external_batch_id,
+        },
+      },
+    });
+    if (prior)
+      return reply.code(202).send({
+        batch_id: prior.publicId,
+        accepted: prior.acceptedCount,
+        rejected: prior.rejectedCount,
+        status: prior.status,
+      });
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const [activeOptOuts, stop, dailyCalls, activeCalls] = await Promise.all([
+      deps.prisma.optOut.findMany({
+        where: {
+          organizationId: client.organizationId,
+          status: 'active',
+          channel: { in: ['all', 'phone'] },
+          normalizedPhoneSnapshot: {
+            in: normalizedTargets.map(({ phone }) => phone.normalizedNumber),
+          },
+        },
+        select: { normalizedPhoneSnapshot: true },
+      }),
+      deps.prisma.emergencyStop.findFirst({
+        where: {
+          active: true,
+          OR: [
+            { scope: 'system' },
+            { scope: 'organization', organizationId: client.organizationId },
+          ],
+        },
+      }),
+      deps.prisma.externalCallExecution.count({
+        where: { integrationClientId: client.id, acceptedAt: { gte: dayStart } },
+      }),
+      deps.prisma.externalCallExecution.count({
+        where: {
+          integrationClientId: client.id,
+          status: { in: ['queued', 'calling', 'in_progress'] },
+        },
+      }),
+    ]);
+    if (stop) return externalError(reply, 409, 'EMERGENCY_STOP_ACTIVE', '緊急停止中です');
+    const blocked = new Set(activeOptOuts.flatMap((item) => item.normalizedPhoneSnapshot ?? []));
+    const eligibleTargets = normalizedTargets.filter(
+      ({ phone }) => !blocked.has(phone.normalizedNumber),
+    );
+    const remainingDaily = Math.max(
+      0,
+      Math.min(client.dailyCallLimit, profile.dailyCallLimit) - dailyCalls,
+    );
+    const remainingConcurrent = Math.max(
+      0,
+      Math.min(client.concurrentCallLimit, profile.concurrentCallLimit) - activeCalls,
+    );
+    const acceptedTargets = eligibleTargets.slice(0, Math.min(remainingDaily, remainingConcurrent));
+    const publicId = `aid_batch_${randomUUID().replaceAll('-', '')}`;
+    const batch = await deps.prisma.$transaction(async (tx) => {
+      const created = await tx.externalCallBatch.create({
+        data: {
+          publicId,
+          organizationId: client.organizationId,
+          integrationClientId: client.id,
+          callProfileId: profile.id,
+          externalBatchId: input.external_batch_id,
+          acceptedCount: acceptedTargets.length,
+          rejectedCount: input.targets.length - acceptedTargets.length,
+        },
+      });
+      for (const { target, phone } of acceptedTargets) {
+        const call = await tx.externalCallExecution.create({
+          data: {
+            publicId: `aid_call_${randomUUID().replaceAll('-', '')}`,
+            organizationId: client.organizationId,
+            integrationClientId: client.id,
+            callProfileId: profile.id,
+            batchId: created.id,
+            externalCallId: target.external_call_id,
+            externalCustomerId: target.external_customer_id,
+            idempotencyKey: randomUUID(),
+            requestHash: requestFingerprint(target),
+            phoneFingerprint: createHmac('sha256', deps.phoneFingerprintKey)
+              .update(phone.normalizedNumber)
+              .digest('base64url'),
+            phoneLast4: phone.normalizedNumber.slice(-4),
+            companyNameSnapshot: target.company_name,
+            contactNameSnapshot: target.contact_name,
+            contextSnapshot: target.context,
+            status: 'queued',
+          },
+        });
+        await tx.externalReference.upsert({
+          where: {
+            integrationClientId_resourceType_externalId: {
+              integrationClientId: client.id,
+              resourceType: 'call',
+              externalId: target.external_call_id,
+            },
+          },
+          update: {},
+          create: {
+            integrationClientId: client.id,
+            resourceType: 'call',
+            externalId: target.external_call_id,
+            internalId: call.id,
+          },
+        });
+        await enqueueOutbox(tx, {
+          organizationId: client.organizationId,
+          eventType: 'external-call',
+          aggregateType: 'external_call_execution',
+          aggregateId: call.id,
+          payload: { executionId: call.id, organizationId: client.organizationId },
+        });
+        await createExternalCallWebhook(tx, call, 'call.accepted', { status: 'accepted' });
+      }
+      return created;
+    });
+    return reply.code(202).send({
+      batch_id: batch.publicId,
+      accepted: batch.acceptedCount,
+      rejected: batch.rejectedCount,
+      status: batch.status,
+    });
+  });
+
+  app.get<{ Params: { batchId: string } }>(
+    '/api/external/v1/call-batches/:batchId',
+    async (request, reply) => {
+      const client = await authenticate(deps, request, reply, 'call-batches:read');
+      if (!client) return;
+      const batch = await deps.prisma.externalCallBatch.findFirst({
+        where: { integrationClientId: client.id, publicId: request.params.batchId },
+      });
+      if (!batch) return externalError(reply, 404, 'NOT_FOUND', 'Batchが見つかりません');
+      return {
+        batch_id: batch.publicId,
+        external_batch_id: batch.externalBatchId,
+        accepted: batch.acceptedCount,
+        rejected: batch.rejectedCount,
+        status: batch.status,
+      };
+    },
+  );
+
   app.get<{ Params: { callId: string } }>(
     '/api/external/v1/calls/:callId',
     async (request, reply) => {
@@ -423,4 +652,26 @@ function errorBody(code: string, message: string): Prisma.InputJsonObject {
 function resultFromTerminalStatus(status: string) {
   if (status === 'failed' || status === 'provider_unknown') return 'failed';
   return null;
+}
+
+async function consumeRateLimit(
+  prisma: PrismaClient,
+  integrationClientId: string,
+  operation: string,
+  limit: number,
+) {
+  const now = new Date();
+  const windowStartedAt = new Date(Math.floor(now.getTime() / 60_000) * 60_000);
+  const bucket = await prisma.integrationRateLimitBucket.upsert({
+    where: {
+      integrationClientId_operation_windowStartedAt: {
+        integrationClientId,
+        operation,
+        windowStartedAt,
+      },
+    },
+    update: { requestCount: { increment: 1 } },
+    create: { integrationClientId, operation, windowStartedAt, requestCount: 1 },
+  });
+  return bucket.requestCount <= limit;
 }
