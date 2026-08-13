@@ -7,6 +7,8 @@ export const outboxEventTypes = [
   'twilio-call',
   'twilio-emergency-stop',
   'provider-webhook',
+  'external-call',
+  'webhook-delivery',
 ] as const;
 export type OutboxEventType = (typeof outboxEventTypes)[number];
 export const outboxEventTypeSchema = z.enum(outboxEventTypes);
@@ -32,18 +34,27 @@ const twilioEmergencyStopPayloadSchema = z
     message: 'authorizationId or emergencyStopId is required',
   });
 const providerWebhookPayloadSchema = z.object({ eventId: z.string().uuid() });
+const externalCallPayloadSchema = z.object({
+  executionId: z.string().uuid(),
+  organizationId: z.string().uuid(),
+});
+const webhookDeliveryPayloadSchema = z.object({ deliveryId: z.string().uuid() });
 
 export type CompanyImportOutboxPayload = z.infer<typeof companyImportPayloadSchema>;
 export type MockCallOutboxPayload = z.infer<typeof mockCallPayloadSchema>;
 export type TwilioCallOutboxPayload = z.infer<typeof twilioCallPayloadSchema>;
 export type TwilioEmergencyStopOutboxPayload = z.infer<typeof twilioEmergencyStopPayloadSchema>;
 export type ProviderWebhookOutboxPayload = z.infer<typeof providerWebhookPayloadSchema>;
+export type ExternalCallOutboxPayload = z.infer<typeof externalCallPayloadSchema>;
+export type WebhookDeliveryOutboxPayload = z.infer<typeof webhookDeliveryPayloadSchema>;
 export type OutboxPayload =
   | CompanyImportOutboxPayload
   | MockCallOutboxPayload
   | TwilioCallOutboxPayload
   | TwilioEmergencyStopOutboxPayload
-  | ProviderWebhookOutboxPayload;
+  | ProviderWebhookOutboxPayload
+  | ExternalCallOutboxPayload
+  | WebhookDeliveryOutboxPayload;
 
 export function parseOutboxPayload(eventType: OutboxEventType, payload: unknown): OutboxPayload {
   switch (eventType) {
@@ -58,5 +69,9 @@ export function parseOutboxPayload(eventType: OutboxEventType, payload: unknown)
       return twilioEmergencyStopPayloadSchema.parse(payload);
     case 'provider-webhook':
       return providerWebhookPayloadSchema.parse(payload);
+    case 'external-call':
+      return externalCallPayloadSchema.parse(payload);
+    case 'webhook-delivery':
+      return webhookDeliveryPayloadSchema.parse(payload);
   }
 }

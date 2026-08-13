@@ -43,6 +43,20 @@ function queueOptions(eventType: OutboxEventType, aggregateId: string): JobsOpti
         attempts: 3,
         backoff: { type: 'exponential', delay: 1000 },
       };
+    case 'external-call':
+      return {
+        ...common,
+        jobId: `external-call-${aggregateId}`,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+      };
+    case 'webhook-delivery':
+      return {
+        ...common,
+        jobId: `webhook-delivery-${aggregateId}`,
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 60_000 },
+      };
   }
 }
 
