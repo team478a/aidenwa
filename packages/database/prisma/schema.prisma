@@ -40,29 +40,217 @@ enum UserStatus {
 }
 
 model Organization {
-  id                String             @id @default(uuid()) @db.Uuid
-  name              String
-  slug              String             @unique
-  timezone          String             @default("Asia/Tokyo")
-  status            OrganizationStatus @default(active)
-  settings          Json               @default("{}")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
-  teams             Team[]
-  users             User[]
-  sessions          Session[]
-  auditLogs         AuditLog[]
-  companies         Company[]
-  contacts          CompanyContact[]
-  phoneNumbers      PhoneNumber[]
-  tags              Tag[]
-  salesLists        SalesList[]
-  optOuts           OptOut[]
-  importJobs        ImportJob[]
-  appointments      Appointment[]
-  appointmentEvents AppointmentEvent[]
+  id                 String                  @id @default(uuid()) @db.Uuid
+  name               String
+  slug               String                  @unique
+  timezone           String                  @default("Asia/Tokyo")
+  status             OrganizationStatus      @default(active)
+  settings           Json                    @default("{}")
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
+  teams              Team[]
+  users              User[]
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  companies          Company[]
+  contacts           CompanyContact[]
+  phoneNumbers       PhoneNumber[]
+  tags               Tag[]
+  salesLists         SalesList[]
+  optOuts            OptOut[]
+  importJobs         ImportJob[]
+  appointments       Appointment[]
+  appointmentEvents  AppointmentEvent[]
+  integrationClients IntegrationClient[]
+  callProfiles       CallProfile[]
+  externalCalls      ExternalCallExecution[]
 
   @@map("organizations")
+}
+
+enum IntegrationEnvironment {
+  sandbox
+  production
+}
+
+enum IntegrationStatus {
+  active
+  suspended
+}
+
+enum CallProfileStatus {
+  draft
+  active
+  suspended
+  archived
+}
+
+enum ExternalCallStatus {
+  accepted
+  validating
+  scheduled
+  queued
+  calling
+  in_progress
+  completed
+  rejected
+  cancelled
+  stopped
+  failed
+  skipped
+  provider_unknown
+}
+
+model IntegrationClient {
+  id                  String                      @id @default(uuid()) @db.Uuid
+  organizationId      String                      @map("organization_id") @db.Uuid
+  name                String
+  environment         IntegrationEnvironment
+  status              IntegrationStatus           @default(active)
+  apiKeyHash          String                      @unique @map("api_key_hash")
+  apiKeyPrefix        String                      @map("api_key_prefix")
+  allowedScopes       Json                        @default("[]") @map("allowed_scopes")
+  allowedCallProfiles Json                        @default("[]") @map("allowed_call_profiles")
+  allowedIps          Json                        @default("[]") @map("allowed_ips")
+  rateLimitPerMinute  Int                         @default(120) @map("rate_limit_per_minute")
+  dailyCallLimit      Int                         @default(100) @map("daily_call_limit")
+  concurrentCallLimit Int                         @default(1) @map("concurrent_call_limit")
+  createdBy           String                      @map("created_by") @db.Uuid
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
+  organization        Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  calls               ExternalCallExecution[]
+  idempotencyRecords  ExternalIdempotencyRecord[]
+  webhookEndpoint     String?                     @map("webhook_endpoint")
+  webhookSecretHash   String?                     @map("webhook_secret_hash")
+  webhookEvents       ExternalWebhookEvent[]
+
+  @@index([organizationId, status, environment])
+  @@map("integration_clients")
+}
+
+model ExternalIdempotencyRecord {
+  id                  String            @id @default(uuid()) @db.Uuid
+  integrationClientId String            @map("integration_client_id") @db.Uuid
+  idempotencyKey      String            @map("idempotency_key") @db.Uuid
+  operation           String
+  requestHash         String            @map("request_hash")
+  statusCode          Int               @map("status_code")
+  responseBody        Json              @map("response_body")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  integrationClient   IntegrationClient @relation(fields: [integrationClientId], references: [id], onDelete: Restrict)
+
+  @@unique([integrationClientId, idempotencyKey])
+  @@index([integrationClientId, createdAt])
+  @@map("external_idempotency_records")
+}
+
+model CallProfile {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  organizationId      String                  @map("organization_id") @db.Uuid
+  publicId            String                  @map("public_id")
+  name                String
+  description         String                  @default("")
+  environment         IntegrationEnvironment
+  status              CallProfileStatus       @default(draft)
+  productVersionId    String                  @map("product_version_id") @db.Uuid
+  aiAgentVersionId    String                  @map("ai_agent_version_id") @db.Uuid
+  scenarioVersionId   String                  @map("scenario_version_id") @db.Uuid
+  knowledgeBaseId     String?                 @map("knowledge_base_id") @db.Uuid
+  timezone            String                  @default("Asia/Tokyo")
+  callableWeekdays    Json                    @default("[1,2,3,4,5]") @map("callable_weekdays")
+  callableStartTime   String                  @default("09:00") @map("callable_start_time")
+  callableEndTime     String                  @default("18:00") @map("callable_end_time")
+  dailyCallLimit      Int                     @default(100) @map("daily_call_limit")
+  concurrentCallLimit Int                     @default(1) @map("concurrent_call_limit")
+  createdBy           String                  @map("created_by") @db.Uuid
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  calls               ExternalCallExecution[]
+
+  @@unique([organizationId, publicId])
+  @@index([organizationId, environment, status])
+  @@map("call_profiles")
+}
+
+model ExternalCallExecution {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  publicId            String                 @unique @map("public_id")
+  organizationId      String                 @map("organization_id") @db.Uuid
+  integrationClientId String                 @map("integration_client_id") @db.Uuid
+  callProfileId       String                 @map("call_profile_id") @db.Uuid
+  externalCallId      String                 @map("external_call_id")
+  externalCustomerId  String                 @map("external_customer_id")
+  idempotencyKey      String                 @map("idempotency_key") @db.Uuid
+  requestHash         String                 @map("request_hash")
+  phoneFingerprint    String                 @map("phone_fingerprint")
+  phoneLast4          String                 @map("phone_last4") @db.VarChar(4)
+  companyNameSnapshot String?                @map("company_name_snapshot")
+  contactNameSnapshot String?                @map("contact_name_snapshot")
+  contextSnapshot     Json                   @default("{}") @map("context_snapshot")
+  status              ExternalCallStatus     @default(accepted)
+  result              String?
+  scheduledAt         DateTime?              @map("scheduled_at")
+  acceptedAt          DateTime               @default(now()) @map("accepted_at")
+  startedAt           DateTime?              @map("started_at")
+  completedAt         DateTime?              @map("completed_at")
+  errorCode           String?                @map("error_code")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+  organization        Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  integrationClient   IntegrationClient      @relation(fields: [integrationClientId], references: [id], onDelete: Restrict)
+  callProfile         CallProfile            @relation(fields: [callProfileId], references: [id], onDelete: Restrict)
+  webhookEvents       ExternalWebhookEvent[]
+
+  @@unique([integrationClientId, idempotencyKey])
+  @@unique([integrationClientId, externalCallId])
+  @@index([organizationId, status, scheduledAt])
+  @@map("external_call_executions")
+}
+
+enum ExternalWebhookDeliveryStatus {
+  pending
+  delivering
+  delivered
+  retrying
+  failed
+}
+
+model ExternalWebhookEvent {
+  id                      String                   @id @default(uuid()) @db.Uuid
+  publicId                String                   @unique @map("public_id")
+  organizationId          String                   @map("organization_id") @db.Uuid
+  integrationClientId     String                   @map("integration_client_id") @db.Uuid
+  externalCallExecutionId String?                  @map("external_call_execution_id") @db.Uuid
+  eventType               String                   @map("event_type")
+  payload                 Json
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  integrationClient       IntegrationClient        @relation(fields: [integrationClientId], references: [id], onDelete: Restrict)
+  externalCallExecution   ExternalCallExecution?   @relation(fields: [externalCallExecutionId], references: [id], onDelete: Restrict)
+  delivery                ExternalWebhookDelivery?
+
+  @@unique([integrationClientId, eventType, externalCallExecutionId])
+  @@index([organizationId, createdAt])
+  @@map("external_webhook_events")
+}
+
+model ExternalWebhookDelivery {
+  id             String                        @id @default(uuid()) @db.Uuid
+  webhookEventId String                        @unique @map("webhook_event_id") @db.Uuid
+  status         ExternalWebhookDeliveryStatus @default(pending)
+  attemptCount   Int                           @default(0) @map("attempt_count")
+  lastAttemptAt  DateTime?                     @map("last_attempt_at")
+  nextAttemptAt  DateTime?                     @map("next_attempt_at")
+  deliveredAt    DateTime?                     @map("delivered_at")
+  responseStatus Int?                          @map("response_status")
+  failureCode    String?                       @map("failure_code")
+  createdAt      DateTime                      @default(now()) @map("created_at")
+  updatedAt      DateTime                      @updatedAt @map("updated_at")
+  webhookEvent   ExternalWebhookEvent          @relation(fields: [webhookEventId], references: [id], onDelete: Restrict)
+
+  @@index([status, nextAttemptAt])
+  @@map("external_webhook_deliveries")
 }
 
 model Team {

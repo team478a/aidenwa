@@ -12,6 +12,8 @@ import {
   recordMaintenanceFailure,
 } from '../maintenance.js';
 import { processProviderWebhook } from '../provider-webhook.js';
+import { processExternalCallRequest } from '../jobs/integrations/call-request.job.js';
+import { deliverExternalWebhook } from '../jobs/integrations/webhook-delivery.job.js';
 
 export type JobHandler = (job: Job) => Promise<void>;
 
@@ -50,6 +52,23 @@ export function createJobHandlers(deps: HandlerDependencies): Readonly<Record<st
     'provider-webhook': async (job) => {
       const data = job.data as { eventId: string };
       await processProviderWebhook(deps.prisma, data.eventId);
+    },
+    'external-call': async (job) => {
+      const data = job.data as { executionId: string; organizationId: string };
+      await processExternalCallRequest(
+        deps.prisma,
+        deps.env,
+        data.executionId,
+        data.organizationId,
+      );
+    },
+    'webhook-delivery': async (job) => {
+      const data = job.data as { deliveryId: string };
+      await deliverExternalWebhook(
+        deps.prisma,
+        deps.env.SOURCE_NUMBER_FINGERPRINT_KEY,
+        data.deliveryId,
+      );
     },
   };
   for (const name of maintenanceJobNames)

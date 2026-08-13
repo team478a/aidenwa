@@ -26,6 +26,7 @@
   confirmation and ephemeral inputs, refuses non-empty identity databases, and records a
   secret-free audit event. Railway execution remains pending.
 - Operator test procedure: `docs/testing/railway-mock-only-operator-test.md`.
+- Sales-user test procedure: `docs/testing/sales-user-mock-smoke-test.md`.
 
 - Status: IN PROGRESS; only Work A and Work B are started by the Phase 10 instruction.
 - Work A progress documents: COMPLETE for the `60ad15a` / CI `30695971040` baseline.
@@ -804,3 +805,66 @@ lint` remains a required CI gate before build.
 - ローカルStage 4A完了条件: PASS。
 - GitHub Actions実CI: run `30407749636` PASS。実Provider接続・実電話の承認状態とは分離して
   記録する。
+
+## Headless AI Call Engine — Phase API-1
+
+- Status: COMPLETE LOCALLY.
+- Added organization-scoped Integration Clients, one-time API key issuance with hash-only storage,
+  scopes, sandbox/production separation and Call Profiles.
+- Added `GET /api/external/v1/call-profiles` and idempotent `POST /api/external/v1/calls` under the
+  separately authenticated `/api/external/v1` boundary.
+- Single-call requests enforce active client/profile, environment, scope, strict input/context
+  limits, phone validation, OptOut, call window, daily/concurrent limits and Emergency Stop.
+- Production external calls fail closed even with `calls:production`; sandbox dispatch uses only
+  Transactional Outbox, BullMQ and `MockVoiceProvider`. Raw phone numbers and API keys are not
+  persisted.
+- Worker repeats mutable Emergency Stop, OptOut and call-window checks immediately before Mock
+  dispatch.
+- Tests: `integration-security.test.ts` 7/7 PASS (key hashing/prefixes, timezone timestamp,
+  forbidden fields, context limits and request fingerprints).
+- Prisma format/generate: PASS. Prisma validate: PASS with a non-secret placeholder
+  `DATABASE_URL`. API/Worker/Database typecheck: PASS. Changed-file lint: PASS.
+- Dedicated empty PostgreSQL database: all 18 migrations through Phase API-1 PASS. Phase API-1/2
+  API integration tests prove idempotent acceptance, one Outbox event and no raw phone persistence.
+- Deferred: webhook/HMAC/retry, batch/rate limiting/external reference and Admin UI. FAX detection
+  from a phone string and the external Production Gate adapter remain documented decisions.
+- External Provider/API calls and real telephone calls: 0.
+
+## Headless AI Call Engine — Phase API-2
+
+- Status: COMPLETE LOCALLY.
+- Added organization-scoped `GET /api/external/v1/calls/{call_id}` and
+  `GET /api/external/v1/calls/{call_id}/result` with separate read scopes.
+- Added idempotent `POST .../cancel` for accepted/validating/scheduled/queued calls and
+  `POST .../stop` for calling/in-progress calls.
+- Added persistent operation-scoped idempotency response records. Same key/request replays the
+  same response; key reuse for another request or operation returns `IDEMPOTENCY_CONFLICT`.
+- Production stop with unknown Provider state fails safe to `provider_unknown` and creates no
+  redial Outbox event. Worker terminal update is conditional, so a concurrent stop cannot be
+  overwritten by a late Mock completion.
+- Dedicated database: all 19 migrations PASS. New integration/security tests: 13/13 PASS.
+- Repository verification: lint PASS, changed-file format PASS, typecheck PASS, 73 files / 253
+  tests PASS, production build PASS and Playwright E2E 8/8 PASS. The repository-wide format check
+  still reports 10 pre-existing files outside this change; they were not rewritten for this
+  feature.
+- The full suite must use one Worker because existing login-rate-limit tests intentionally share
+  database state; parallel execution causes test-only interference.
+- External Provider/API calls and real telephone calls: 0.
+
+## Headless AI Call Engine — Phase API-3
+
+- Status: COMPLETE LOCALLY.
+- Added one-time Webhook Secret issuance with hash-only persistence and deterministic server-side
+  secret recovery; the secret is never stored in plaintext.
+- Added immutable external Webhook events, one Delivery record per event and transactional Outbox
+  publication for accepted, started, completed, qualified, cancelled, stopped and
+  provider-unknown Call transitions.
+- Added `X-Aidenwa-Event-Id`, timestamp and HMAC-SHA256 signatures over the exact raw body, with a
+  five-minute replay verification window.
+- Added delivery states, idempotent successful redelivery, retry delays, five-attempt exhaustion
+  and deduplicated sanitized Incident creation.
+- Dedicated database: all 20 migrations PASS. Focused Phase API-3 tests: 3/3 PASS; combined
+  integration/security set: 9/9 PASS.
+- Repository verification: lint PASS, typecheck PASS, 75 files / 256 tests PASS and production
+  build PASS. Phase API-2 Playwright E2E remains 8/8 PASS; Phase API-3 adds no browser UI.
+- External Provider/API calls and real telephone calls: 0.

@@ -6,7 +6,9 @@ export type OutboxEventType =
   | 'mock-call'
   | 'twilio-call'
   | 'twilio-emergency-stop'
-  | 'provider-webhook';
+  | 'provider-webhook'
+  | 'external-call'
+  | 'webhook-delivery';
 
 type OutboxClient = Prisma.TransactionClient | PrismaClient;
 
@@ -18,6 +20,7 @@ export async function enqueueOutbox(
     aggregateType: string;
     aggregateId: string;
     payload: Prisma.InputJsonObject;
+    availableAt?: Date;
   },
 ) {
   return tx.outboxEvent.upsert({
@@ -34,6 +37,7 @@ export async function enqueueOutbox(
       aggregateType: input.aggregateType,
       aggregateId: input.aggregateId,
       payload: input.payload,
+      ...(input.availableAt ? { availableAt: input.availableAt } : {}),
     },
   });
 }

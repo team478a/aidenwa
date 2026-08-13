@@ -33,6 +33,8 @@ import { registerStage4B2MediaRoutes } from './stage4b2-media.js';
 import { registerStage4DRoutes } from './stage4d-routes.js';
 import { registerStage4ERoutes } from './modules/appointments/appointment.routes.js';
 import { sendPublicError, toPublicError } from './core/errors/http-error.js';
+import { registerIntegrationAdminRoutes } from './modules/integrations/admin.routes.js';
+import { registerExternalIntegrationRoutes } from './modules/integrations/external.routes.js';
 
 const SESSION_COOKIE = 'sales_ai_session';
 const CSRF_COOKIE = 'sales_ai_csrf';
@@ -607,6 +609,18 @@ export function buildApp(environment: NodeJS.ProcessEnv = process.env, options: 
   registerStage4B2MediaRoutes(app, { prisma, env });
   registerStage4DRoutes(app, { prisma, env, authorize, verifyCsrf, error });
   registerStage4ERoutes(app, { prisma, env, authorize, verifyCsrf, error });
+  registerIntegrationAdminRoutes(app, {
+    prisma,
+    authenticate,
+    authorize,
+    verifyCsrf,
+    error,
+    webhookMasterKey: env.SOURCE_NUMBER_FINGERPRINT_KEY,
+  });
+  registerExternalIntegrationRoutes(app, {
+    prisma,
+    phoneFingerprintKey: env.SOURCE_NUMBER_FINGERPRINT_KEY,
+  });
   return app;
 }
 

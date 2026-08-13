@@ -1,5 +1,9 @@
 # Implementation History
 
+- Added a non-technical Japanese Railway Mock smoke-test guide for sales users, with exact menu and
+  button labels, synthetic sample data, pass/fail criteria, a result worksheet, troubleshooting,
+  and explicit instructions not to use real customer data or real-call controls.
+
 - Added a Railway Mock-only operator test guide covering the initial-admin prerequisite,
   synthetic-data-only login-to-appointment flow, evidence recording, safety checks and stop
   conditions. Added a confirmation-gated, transaction-locked, audit-recorded one-time initial
@@ -723,3 +727,44 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   connect to an external Provider or start a real telephone call.
 - Verified `pnpm release:check`, lint, typecheck, 237 unit/API/Worker tests, the Railway-context
   production build and clean Docker builds for Web/API/Worker. Prisma OpenSSL detection is clean.
+
+## 2026-08-13 — Headless AI Call Engine Phase API-1
+
+- Added Prisma models and a migration for Integration Clients, Call Profiles and minimal external
+  call snapshots.
+- Added one-time API key issuance, hash authentication, scopes and strict Zod request/context
+  validation for the external API boundary.
+- Added sandbox Call Profile discovery and idempotent single-call acceptance with organization
+  isolation and fail-closed production behavior.
+- Connected accepted calls to the existing transactional outbox and Worker, using only
+  `MockVoiceProvider`, with mutable safety checks repeated before dispatch.
+- Added focused security/schema tests and documented the Phase API-1 production/FAX boundaries in
+  decision 0007.
+
+## 2026-08-13 — Headless AI Call Engine Phase API-2
+
+- Added external Call status and standardized terminal-result read endpoints.
+- Added scoped Cancel and Stop actions with atomic state transitions and persistent idempotency
+  response records.
+- Made production Stop fail safe to `provider_unknown` when Provider state is unavailable, without
+  creating any automatic-redial job.
+- Prevented a late Mock completion from overwriting a concurrent terminal Stop state.
+- Added database integration tests for ownership isolation, results, Cancel replay/conflict,
+  Sandbox Stop, production unknown-state handling and raw-phone non-persistence.
+- Applied all 19 migrations to a dedicated empty database and passed lint, changed-file format,
+  typecheck, all 253 unit/API/Worker tests, 8 Playwright E2E tests and the production build.
+- External Provider/API calls and real telephone calls: 0.
+
+## 2026-08-13 — Headless AI Call Engine Phase API-3
+
+- Added Webhook endpoint/secret configuration, immutable event and delivery persistence and a
+  migration for the external delivery ledger.
+- Added transactional Call event generation and Outbox jobs without duplicating the existing
+  Outbox publisher.
+- Added exact-body HMAC signing, five-minute replay verification, delivery history, retry state and
+  exhaustion Incident creation.
+- Added tests for signature verification, body tampering, replay expiry, successful duplicate
+  delivery suppression and one Incident after five failures.
+- Applied all 20 migrations and passed lint, typecheck, all 256 unit/API/Worker tests and the
+  production build.
+- External Provider/API calls and real telephone calls: 0.
