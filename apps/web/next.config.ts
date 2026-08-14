@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 import { resolveApiInternalUrl } from './config/api-internal-url';
+import { buildApiRewrites } from './config/api-rewrites';
 
 const apiInternalUrl = resolveApiInternalUrl(process.env);
 const nextConfig: NextConfig = {
@@ -7,9 +8,7 @@ const nextConfig: NextConfig = {
   // Next 15 build-time detector, which does not recognize our repository-root flat config.
   eslint: { ignoreDuringBuilds: true },
   rewrites() {
-    return Promise.resolve([
-      { source: '/backend/:path*', destination: `${apiInternalUrl}/api/v1/:path*` },
-    ]);
+    return Promise.resolve(buildApiRewrites(apiInternalUrl));
   },
 };
 export default nextConfig;

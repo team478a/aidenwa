@@ -788,3 +788,5 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   screen without exposing Production activation.
 - Added a Sandbox API quickstart covering profile discovery, Mock Call execution and Key incident
   handling.
+- Added a dedicated Web rewrite for `/backend/external/*` so public Headless API requests reach the
+  separate `/api/external/*` boundary without changing existing admin `/api/v1/*` routing.
