@@ -792,3 +792,10 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   separate `/api/external/*` boundary without changing existing admin `/api/v1/*` routing.
 - Made API startup fail closed on `prisma migrate deploy`, because the live Railway service was not
   attached to the repository config file and had started against an unmigrated database.
+- Merged and deployed the public Headless routing and fail-closed migration changes to Railway.
+- Confirmed the API deployment applied the database migrations and reached Active status; Web,
+  API, Worker, PostgreSQL and Redis report Online.
+- Corrected the Railway Web `API_INTERNAL_URL` from the nonexistent `api.railway.internal` alias to
+  the API service's actual private DNS `sales-aiapi.railway.internal` and redeployed Web.
+- Verified the public Headless and admin proxy paths return the expected unauthenticated 401 JSON
+  responses instead of proxy/database 500 errors. No external Provider or real-call action ran.
