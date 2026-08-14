@@ -40,7 +40,9 @@ one-time procedure after deployment; never place its password in Git or build ar
 
 1. Confirm CI, dependency audit and `pnpm release:check` pass for the candidate commit.
 2. Provision PostgreSQL and Redis and enable the available automated backup policy.
-3. Deploy `api`. Its pre-deploy command runs `prisma migrate deploy` and must finish successfully.
+3. Deploy `api`. Its start command runs `prisma migrate deploy` before starting the HTTP process and
+   must finish successfully. This fail-closed guard is required even when Railway config-as-code is
+   not attached to the service.
 4. Deploy `worker`, then confirm `GET /health/worker` through an authenticated operational path or
    Railway logs reports a fresh worker heartbeat.
 5. Deploy `web`, generate its HTTPS domain and confirm `/login` responds over HTTPS.

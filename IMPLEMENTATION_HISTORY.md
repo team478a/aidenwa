@@ -790,3 +790,5 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   handling.
 - Added a dedicated Web rewrite for `/backend/external/*` so public Headless API requests reach the
   separate `/api/external/*` boundary without changing existing admin `/api/v1/*` routing.
+- Made API startup fail closed on `prisma migrate deploy`, because the live Railway service was not
+  attached to the repository config file and had started against an unmigrated database.
