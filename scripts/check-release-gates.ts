@@ -25,11 +25,13 @@ const blankSecrets = [
 ] as const;
 
 async function main() {
-  const [example, workflow, railwayExample] = await Promise.all([
+  const [example, workflow, railwayExample, apiPackageRaw] = await Promise.all([
     readFile(new URL('../.env.example', import.meta.url), 'utf8'),
     readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'),
     readFile(new URL('../deploy/railway/mock-only.env.example', import.meta.url), 'utf8'),
+    readFile(new URL('../apps/api/package.json', import.meta.url), 'utf8'),
   ]);
+  const apiPackage = JSON.parse(apiPackageRaw) as { scripts?: { start?: string } };
 
   const failures: string[] = [];
   for (const flag of disabledFlags) {
@@ -49,6 +51,8 @@ async function main() {
   for (const secret of blankSecrets)
     if (new RegExp(`^${secret}=`, 'm').test(railwayExample))
       failures.push(`Railway template must omit external credential ${secret}`);
+  if (!apiPackage.scripts?.start?.startsWith('pnpm --workspace-root db:migrate && '))
+    failures.push('API start must fail closed until database migrations succeed');
 
   if (failures.length) {
     for (const failure of failures) console.error(`release_gate_failed: ${failure}`);
