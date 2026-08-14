@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { externalCallSchema } from './schemas.js';
+import { externalCallSchema, updateIntegrationClientSchema } from './schemas.js';
 import { hashApiKey, issueApiKey, requestFingerprint } from './security.js';
 
 const validCall = {
@@ -45,5 +45,23 @@ describe('headless integration security', () => {
   it('produces the same request fingerprint for the same parsed request', () => {
     const parsed = externalCallSchema.parse(validCall);
     expect(requestFingerprint(parsed)).toBe(requestFingerprint(parsed));
+  });
+
+  it('makes a previously issued API key invalid after rotation', () => {
+    const previous = issueApiKey('sandbox');
+    const rotated = issueApiKey('sandbox');
+    expect(hashApiKey(previous.apiKey)).not.toBe(rotated.apiKeyHash);
+    expect(hashApiKey(rotated.apiKey)).toBe(rotated.apiKeyHash);
+  });
+
+  it('strictly validates client updates and permits an explicit suspension', () => {
+    expect(updateIntegrationClientSchema.parse({ status: 'suspended' })).toEqual({
+      status: 'suspended',
+    });
+    expect(updateIntegrationClientSchema.safeParse({}).success).toBe(false);
+    expect(
+      updateIntegrationClientSchema.safeParse({ status: 'active', skip_production_gate: true })
+        .success,
+    ).toBe(false);
   });
 });

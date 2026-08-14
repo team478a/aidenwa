@@ -13,5 +13,5 @@ overrides:
   fast-json-stringify>fast-uri: 4.1.2
   fastify>find-my-way: 9.7.0
   next>postcss: 8.5.18
-  nanoid: 3.3.17
+  nanoid: 3.3.18
   next>sharp: 0.35.0

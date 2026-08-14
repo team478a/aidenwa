@@ -24,11 +24,30 @@ export const createIntegrationClientSchema = z
     allowedScopes: z.array(z.enum(integrationScopes)).min(1),
     allowedCallProfiles: z.array(z.string().regex(/^cp_[a-z0-9_]+_v\d+$/u)).max(100),
     allowedIps: z.array(z.string().ip()).max(100).default([]),
+    rateLimitPerMinute: z.number().int().positive().max(10_000).default(120),
     dailyCallLimit: z.number().int().positive().max(100_000).default(100),
     concurrentCallLimit: z.number().int().positive().max(100).default(1),
     webhookEndpoint: z.string().url().max(2048).optional(),
   })
   .strict();
+
+export const updateIntegrationClientSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    status: z.enum(['active', 'suspended']).optional(),
+    allowedScopes: z.array(z.enum(integrationScopes)).min(1).optional(),
+    allowedCallProfiles: z
+      .array(z.string().regex(/^cp_[a-z0-9_]+_v\d+$/u))
+      .max(100)
+      .optional(),
+    allowedIps: z.array(z.string().ip()).max(100).optional(),
+    rateLimitPerMinute: z.number().int().positive().max(10_000).optional(),
+    dailyCallLimit: z.number().int().positive().max(100_000).optional(),
+    concurrentCallLimit: z.number().int().positive().max(100).optional(),
+    webhookEndpoint: z.string().url().max(2048).nullable().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, 'at least one field is required');
 
 export const createCallProfileSchema = z
   .object({
