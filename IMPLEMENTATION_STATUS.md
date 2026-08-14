@@ -894,7 +894,7 @@ lint` remains a required CI gate before build.
 
 ## Headless API admin operations
 
-- Status: COMPLETE ON MASTER; Railway deployment verification pending.
+- Status: COMPLETE ON MASTER; Railway deployment verified.
 - Admins can update organization-scoped Client Profile assignments, per-minute rate limit, daily
   limit and concurrent limit, and can suspend/resume a Client.
 - API Key rotation invalidates the previous Key immediately and displays the replacement once.
@@ -907,8 +907,14 @@ lint` remains a required CI gate before build.
 
 ## Headless API public routing
 
-- Status: COMPLETE LOCALLY; GitHub publication pending.
+- Status: COMPLETE ON MASTER; Railway public routing verified.
 - Added a dedicated `/backend/external/*` Web rewrite to the API `/api/external/*` boundary.
 - Kept existing admin `/backend/*` requests routed to `/api/v1/*`.
 - Regression verification: lint PASS, typecheck PASS, focused rewrite tests 10/10 PASS and
   production build PASS.
+- Railway runtime verification: API startup applied all pending Prisma migrations before serving;
+  Web, API, Worker, PostgreSQL and Redis are Online. Corrected Web `API_INTERNAL_URL` to the actual
+  API private DNS `sales-aiapi.railway.internal`.
+- Public unauthenticated smoke: `/backend/external/v1/call-profiles` returns 401
+  `UNAUTHENTICATED` with a request ID, and `/backend/auth/me` returns 401 `UNAUTHENTICATED`.
+- External Provider/API calls and real telephone calls: 0.
