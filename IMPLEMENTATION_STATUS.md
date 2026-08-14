@@ -894,7 +894,7 @@ lint` remains a required CI gate before build.
 
 ## Headless API admin operations
 
-- Status: COMPLETE LOCALLY; GitHub publication pending.
+- Status: COMPLETE ON MASTER; Railway deployment verification pending.
 - Admins can update organization-scoped Client Profile assignments, per-minute rate limit, daily
   limit and concurrent limit, and can suspend/resume a Client.
 - API Key rotation invalidates the previous Key immediately and displays the replacement once.
@@ -904,3 +904,11 @@ lint` remains a required CI gate before build.
 - Added `docs/api/headless-sandbox-quickstart.md` for external Sandbox consumers.
 - Verification: lint PASS, typecheck PASS, 75 files / 260 tests PASS, production build PASS.
 - External Provider/API calls and real telephone calls: 0.
+
+## Headless API public routing
+
+- Status: COMPLETE LOCALLY; GitHub publication pending.
+- Added a dedicated `/backend/external/*` Web rewrite to the API `/api/external/*` boundary.
+- Kept existing admin `/backend/*` requests routed to `/api/v1/*`.
+- Regression verification: lint PASS, typecheck PASS, focused rewrite tests 10/10 PASS and
+  production build PASS.
