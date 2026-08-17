@@ -82,12 +82,12 @@ export default function AdminLayout({ children }: Readonly<{ children: ReactNode
   if (!user) return null;
   return (
     <div className="app-shell">
-      <aside className="app-sidebar">
-        <div className="sidebar-brand">
+      <aside>
+        <div>
           <p className="eyebrow">SALES AI OS</p>
           <strong>Operations</strong>
         </div>
-        <nav aria-label="管理メニュー" className="sidebar-nav">
+        <nav>
           {links
             .filter((item) => item.roles.includes(user.role))
             .map((item) => (
@@ -111,7 +111,7 @@ export default function AdminLayout({ children }: Readonly<{ children: ReactNode
         </div>
       </aside>
       <div className="workspace">
-        <header className="workspace-header">
+        <header>
           <span>AI・DX無料診断</span>
           <span className="pill">Stage 1</span>
         </header>
