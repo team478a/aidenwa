@@ -155,7 +155,7 @@ export default function TwilioLimitedTestPage() {
     await load();
   }
   return (
-    <main>
+    <main className="twilio-test-page">
       <div className="page-heading">
         <div>
           <p className="eyebrow">STAGE 4B-1</p>
@@ -165,33 +165,69 @@ export default function TwilioLimitedTestPage() {
         <span className="pill">DEFAULT DISABLED</span>
       </div>
       {msg && <p className="notice">{msg}</p>}
-      <section className="card">
-        <h2>接続状態</h2>
-        <p>
-          資格情報は表示しません。production環境、環境/DB Gate、release
-          commit一致、書面承認が必要です。
-        </p>
-        <p>Zoom Phone: 未接続・Stage 4B-2以降</p>
-        {user?.role === 'system_admin' && (
-          <p>Twilio: {summary?.twilioConnectionState ?? 'not_configured'}</p>
-        )}
-        <div className="stats-grid">
-          <p>本日の実電話予約: {summary?.todayCount ?? 0} / 5</p>
-          <p>現在の通話数: {summary?.activeCount ?? 0} / 1</p>
-          <p>
-            推定料金: {summary?.estimatedCostMinor ?? 0} {summary?.currency ?? 'JPY'}
-          </p>
-          <p>
-            確定料金: {summary?.finalCostMinor ?? 0} {summary?.currency ?? 'JPY'}
-          </p>
+      <section className="card twilio-status-card">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">CONNECTION &amp; SAFETY</p>
+            <h2>接続状態</h2>
+          </div>
+          <span className="pill">資格情報は非表示</span>
         </div>
-        <p>緊急停止: {summary?.emergencyStopActive ? '有効' : 'なし'}</p>
-        <p>
-          最新Gate拒否理由:{' '}
-          {summary?.lastGateRejectionReasons.length
-            ? summary.lastGateRejectionReasons.join(', ')
-            : 'なし'}
+        <p className="section-lead">
+          production環境、環境・DB Gate、release commit一致、書面承認のすべてが必要です。
         </p>
+        <div className="connection-grid">
+          <div className="connection-item">
+            <span>Zoom Phone</span>
+            <strong>未接続</strong>
+            <small>Stage 4B-2以降</small>
+          </div>
+          <div className="connection-item">
+            <span>Twilio</span>
+            <strong>
+              {user?.role === 'system_admin'
+                ? (summary?.twilioConnectionState ?? 'not_configured')
+                : '管理者のみ表示'}
+            </strong>
+            <small>外部接続は既定で無効</small>
+          </div>
+        </div>
+        <div className="stats-grid">
+          <div className="stat">
+            <span>本日の実電話予約</span>
+            <strong>{summary?.todayCount ?? 0} / 5</strong>
+          </div>
+          <div className="stat">
+            <span>現在の通話数</span>
+            <strong>{summary?.activeCount ?? 0} / 1</strong>
+          </div>
+          <div className="stat">
+            <span>推定料金</span>
+            <strong>
+              {summary?.estimatedCostMinor ?? 0} {summary?.currency ?? 'JPY'}
+            </strong>
+          </div>
+          <div className="stat">
+            <span>確定料金</span>
+            <strong>
+              {summary?.finalCostMinor ?? 0} {summary?.currency ?? 'JPY'}
+            </strong>
+          </div>
+        </div>
+        <div className="safety-grid">
+          <div>
+            <span>緊急停止</span>
+            <strong>{summary?.emergencyStopActive ? '有効' : 'なし'}</strong>
+          </div>
+          <div>
+            <span>最新Gate拒否理由</span>
+            <strong>
+              {summary?.lastGateRejectionReasons.length
+                ? summary.lastGateRejectionReasons.join(', ')
+                : 'なし'}
+            </strong>
+          </div>
+        </div>
       </section>
       {user?.role === 'system_admin' && (
         <section className="card">
