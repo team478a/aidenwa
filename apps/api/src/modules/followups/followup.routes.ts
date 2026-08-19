@@ -31,6 +31,8 @@ type Deps = {
 };
 export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
   const { prisma } = deps;
+  const assigneeRoles: UserRole[] = [UserRole.operator, UserRole.sales];
+  const isAssigneeRole = (role: UserRole) => role === UserRole.operator || role === UserRole.sales;
   const mutate = async (request: FastifyRequest, reply: FastifyReply, roles: UserRole[]) => {
     const auth = await deps.authorize(request, reply, roles);
     if (!auth || !deps.verifyCsrf(request, reply, auth)) return;
@@ -58,6 +60,7 @@ export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
       UserRole.system_admin,
       UserRole.admin,
       UserRole.manager,
+      UserRole.operator,
       UserRole.sales,
     ]);
     if (!auth) return;
@@ -65,7 +68,7 @@ export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
       tasks: await prisma.humanFollowupTask.findMany({
         where: {
           organizationId: auth.organizationId,
-          ...(auth.role === UserRole.sales ? { assigneeUserId: auth.userId } : {}),
+          ...(isAssigneeRole(auth.role) ? { assigneeUserId: auth.userId } : {}),
         },
         orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }, { createdAt: 'desc' }],
         take: 100,
@@ -77,6 +80,7 @@ export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
       UserRole.system_admin,
       UserRole.admin,
       UserRole.manager,
+      UserRole.operator,
       UserRole.sales,
     ]);
     if (!auth) return;
@@ -85,7 +89,7 @@ export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
       where: {
         id,
         organizationId: auth.organizationId,
-        ...(auth.role === UserRole.sales ? { assigneeUserId: auth.userId } : {}),
+        ...(isAssigneeRole(auth.role) ? { assigneeUserId: auth.userId } : {}),
       },
     });
     if (!task) return deps.error(reply, 404, 'NOT_FOUND', 'タスクがありません');
@@ -125,7 +129,7 @@ export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
   });
   const selfTransition = (path: string, action: string, from: string[], status: string) =>
     app.post(path, async (request, reply) => {
-      const auth = await mutate(request, reply, [UserRole.sales]);
+      const auth = await mutate(request, reply, assigneeRoles);
       if (!auth) return;
       const parsed = followupVersionSchema.safeParse(request.body);
       if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
@@ -167,7 +171,7 @@ export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
     'in_progress',
   );
   app.post('/api/v1/human-followup-tasks/:id/snooze', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.sales]);
+    const auth = await mutate(request, reply, assigneeRoles);
     if (!auth) return;
     const parsed = followupSnoozeSchema.safeParse(request.body);
     if (!parsed.success || parsed.data.until <= new Date())
@@ -191,7 +195,7 @@ export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
     }
   });
   app.post('/api/v1/human-followup-tasks/:id/record-attempt', async (request, reply) => {
-    const auth = await mutate(request, reply, [UserRole.sales]);
+    const auth = await mutate(request, reply, assigneeRoles);
     if (!auth) return;
     const parsed = followupAttemptSchema.safeParse(request.body);
     if (!parsed.success) return deps.error(reply, 400, 'VALIDATION_ERROR', parsed.error.message);
@@ -222,6 +226,7 @@ export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
       UserRole.system_admin,
       UserRole.admin,
       UserRole.manager,
+      UserRole.operator,
       UserRole.sales,
     ]);
     if (!auth) return;
@@ -232,7 +237,7 @@ export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
       where: {
         id,
         organizationId: auth.organizationId,
-        ...(auth.role === UserRole.sales ? { assigneeUserId: auth.userId } : {}),
+        ...(isAssigneeRole(auth.role) ? { assigneeUserId: auth.userId } : {}),
       },
     });
     if (!owned) return deps.error(reply, 404, 'NOT_FOUND', 'タスクがありません');
@@ -301,10 +306,16 @@ export function registerFollowupRoutes(app: FastifyInstance, deps: Deps) {
           id: parsed.data.fixedAssigneeId,
           organizationId: auth.organizationId,
           status: 'active',
-          role: 'sales',
+          role: { in: [UserRole.operator, UserRole.sales] },
         },
       });
-      if (!user) return deps.error(reply, 409, 'ASSIGNEE_INVALID', '有効な営業担当者が必要です');
+      if (!user)
+        return deps.error(
+          reply,
+          409,
+          'ASSIGNEE_INVALID',
+          '有効な電話担当者または営業担当者が必要です',
+        );
     }
     const existing = await prisma.followupAssignmentRule.findFirst({
       where: { organizationId: auth.organizationId, campaignId: parsed.data.campaignId ?? null },

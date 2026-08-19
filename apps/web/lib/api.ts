@@ -1,4 +1,11 @@
-export type Role = 'system_admin' | 'admin' | 'manager' | 'sales';
+export type Role = 'system_admin' | 'admin' | 'manager' | 'operator' | 'sales';
+export const roleLabels: Readonly<Record<Role, string>> = {
+  system_admin: 'システム管理者',
+  admin: 'クライアント管理者',
+  manager: '電話責任者',
+  operator: '電話担当者',
+  sales: '営業担当者',
+};
 export type CurrentUser = {
   id: string;
   name: string;
