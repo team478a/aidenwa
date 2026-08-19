@@ -49,8 +49,40 @@ export const updateOrganizationSchema = z
       .max(100)
       .optional(),
     timezone: z.string().min(1).max(100).optional(),
-    status: z.enum(['active', 'suspended']).optional(),
     settings: z.record(z.unknown()).optional(),
   })
   .refine((value) => Object.keys(value).length > 0);
 export const idParamsSchema = z.object({ id: z.string().uuid() });
+
+const organizationLimitsSchema = z.object({
+  monthlyCallLimit: z.number().int().min(0).max(1_000_000),
+  concurrentCallLimit: z.number().int().min(1).max(1_000),
+});
+
+export const createSystemOrganizationSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    slug: z
+      .string()
+      .regex(/^[a-z0-9-]+$/)
+      .min(1)
+      .max(100),
+    timezone: z.string().min(1).max(100).default('Asia/Tokyo'),
+    plan: z.enum(['trial', 'standard', 'enterprise']).default('trial'),
+    monthlyCallLimit: organizationLimitsSchema.shape.monthlyCallLimit.default(1000),
+    concurrentCallLimit: organizationLimitsSchema.shape.concurrentCallLimit.default(1),
+    administrator: z.object({
+      name: z.string().trim().min(1).max(100),
+      email: z
+        .string()
+        .email()
+        .transform((value) => value.toLowerCase()),
+      temporaryPassword: z.string().min(16).max(200),
+    }),
+  })
+  .strict();
+
+export const updateSystemOrganizationLimitsSchema = organizationLimitsSchema
+  .partial()
+  .extend({ plan: z.enum(['trial', 'standard', 'enterprise']).optional() })
+  .refine((value) => Object.keys(value).length > 0);

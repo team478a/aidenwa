@@ -21,6 +21,12 @@ enum OrganizationStatus {
   suspended
 }
 
+enum OrganizationPlan {
+  trial
+  standard
+  enterprise
+}
+
 enum TeamStatus {
   active
   suspended
@@ -41,30 +47,33 @@ enum UserStatus {
 }
 
 model Organization {
-  id                 String                  @id @default(uuid()) @db.Uuid
-  name               String
-  slug               String                  @unique
-  timezone           String                  @default("Asia/Tokyo")
-  status             OrganizationStatus      @default(active)
-  settings           Json                    @default("{}")
-  createdAt          DateTime                @default(now()) @map("created_at")
-  updatedAt          DateTime                @updatedAt @map("updated_at")
-  teams              Team[]
-  users              User[]
-  sessions           Session[]
-  auditLogs          AuditLog[]
-  companies          Company[]
-  contacts           CompanyContact[]
-  phoneNumbers       PhoneNumber[]
-  tags               Tag[]
-  salesLists         SalesList[]
-  optOuts            OptOut[]
-  importJobs         ImportJob[]
-  appointments       Appointment[]
-  appointmentEvents  AppointmentEvent[]
-  integrationClients IntegrationClient[]
-  callProfiles       CallProfile[]
-  externalCalls      ExternalCallExecution[]
+  id                  String                  @id @default(uuid()) @db.Uuid
+  name                String
+  slug                String                  @unique
+  timezone            String                  @default("Asia/Tokyo")
+  status              OrganizationStatus      @default(active)
+  plan                OrganizationPlan        @default(trial)
+  monthlyCallLimit    Int                     @default(1000) @map("monthly_call_limit")
+  concurrentCallLimit Int                     @default(1) @map("concurrent_call_limit")
+  settings            Json                    @default("{}")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  teams               Team[]
+  users               User[]
+  sessions            Session[]
+  auditLogs           AuditLog[]
+  companies           Company[]
+  contacts            CompanyContact[]
+  phoneNumbers        PhoneNumber[]
+  tags                Tag[]
+  salesLists          SalesList[]
+  optOuts             OptOut[]
+  importJobs          ImportJob[]
+  appointments        Appointment[]
+  appointmentEvents   AppointmentEvent[]
+  integrationClients  IntegrationClient[]
+  callProfiles        CallProfile[]
+  externalCalls       ExternalCallExecution[]
 
   @@map("organizations")
 }
@@ -332,6 +341,7 @@ model User {
   passwordHash         String             @map("password_hash")
   role                 UserRole
   status               UserStatus         @default(invited)
+  mustChangePassword   Boolean            @default(false) @map("must_change_password")
   lastLoginAt          DateTime?          @map("last_login_at")
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
