@@ -1,9 +1,9 @@
 # Implementation Status
 
-- Current stage: Phase 10 — Release Readiness
+- Current stage: Phase 11 PR 1 — 単体SaaS調査・権限基盤
 - Release state: Phase 1–9 verified; Railway Mock-only deployment configuration prepared;
   environment provisioning remains No-Go; external providers disabled
-- Updated: 2026-08-01
+- Updated: 2026-08-19
 - Latest verification:
   - Unit/API/Worker/Web configuration: 237 tests PASS locally
   - E2E: 8/8 PASS
@@ -18,6 +18,28 @@
   - External Provider/API/real telephone calls: 0
   - Railway preparation verification: release gate, lint, typecheck, 237 unit/API/Worker tests,
     Railway-context production build and Web/API/Worker Docker image builds PASS
+
+## Phase 11 PR 1 — 調査・権限基盤
+
+- 状態: COMPLETE / DRAFT PR #13 REVIEW PENDING
+- 基準: `origin/master`の`d5a1f88`。open PR #12は未取込。
+- 現状分析: `docs/phase11/current-state-analysis.md`
+- 権限定義: `docs/phase11/role-permission-matrix.md`
+- DB/API/Webへ`operator`（電話担当者）を追加。既存ロールの自動変更なし。
+- operatorのFollowup/Handoffは同一Organizationかつ本人割当に限定。
+- adminによるoperator作成を許可し、system_admin作成、operatorのユーザー管理・キャンペーン遷移を拒否。
+- Webメニューを業務目的別に整理し、5ロールの日本語表示を追加。
+- migration: 空DBへ全22件PASS。`UserRole`追加は`IF NOT EXISTS`で既存DBへ安全に追加。
+- Prisma format/validate/generate: PASS。
+- lint: PASS。今回変更ファイルのformat: PASS。Windowsローカルの全体formatは基準masterの既存改行差分494件を検出するため、GitHub CIで最終判定する。
+- typecheck: 全12 workspace PASS。
+- Unit/API/Worker: 76 files / 265 tests PASS。Phase 11認可テスト12/12 PASS。
+- Dependency audit: `deepmerge-ts`を8.0.0へ固定し、High/Critical 0件（Moderate 1件）。
+- E2E、production build: PASS。
+- GitHub Actions: run `32221620990` PASS（install、dependency audit、release gate、Prisma、全migration、seed、lint、format、typecheck、265 tests、E2E、build）。
+- 実電話、Twilio/OpenAI/Zoom/Calendar等の外部Provider通信: 0件。
+- Production関連Feature Flag: すべてfalseのまま。
+- PR 2へ進める条件: PR #13のレビュー・masterへのマージ完了。全組織管理API、専用system画面、初期クライアント管理者はPR 2で実装する。
 
 ## Phase 10 — Release Readiness
 

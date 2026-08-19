@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { api } from '../../../lib/api';
+import { api, roleLabels, type Role } from '../../../lib/api';
 
 type User = {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: Role;
   status: string;
   lastLoginAt: string | null;
   team: { name: string } | null;
@@ -73,9 +73,10 @@ export default function UsersPage() {
             required
           />
           <select name="role" defaultValue="sales">
-            <option value="sales">sales</option>
-            <option value="manager">manager</option>
-            <option value="admin">admin</option>
+            <option value="sales">営業担当者</option>
+            <option value="operator">電話担当者</option>
+            <option value="manager">電話責任者</option>
+            <option value="admin">クライアント管理者</option>
           </select>
           <button>作成</button>
         </form>
@@ -100,7 +101,7 @@ export default function UsersPage() {
                 <td>{user.name}</td>
                 <td>{user.email}</td>
                 <td>
-                  <span className="tag">{user.role}</span>
+                  <span className="tag">{roleLabels[user.role]}</span>
                 </td>
                 <td>{user.team?.name ?? '未所属'}</td>
                 <td>{user.status}</td>

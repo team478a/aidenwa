@@ -19,13 +19,13 @@ export const createUserSchema = z.object({
     .email()
     .transform((value) => value.toLowerCase()),
   password: z.string().min(12).max(200),
-  role: z.enum(['system_admin', 'admin', 'manager', 'sales']),
+  role: z.enum(['system_admin', 'admin', 'manager', 'operator', 'sales']),
   teamId: z.string().uuid().nullable().optional(),
 });
 export const updateUserSchema = z
   .object({
     name: z.string().trim().min(1).max(100).optional(),
-    role: z.enum(['system_admin', 'admin', 'manager', 'sales']).optional(),
+    role: z.enum(['system_admin', 'admin', 'manager', 'operator', 'sales']).optional(),
     teamId: z.string().uuid().nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0);

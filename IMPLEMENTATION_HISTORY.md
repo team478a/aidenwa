@@ -799,3 +799,23 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   the API service's actual private DNS `sales-aiapi.railway.internal` and redeployed Web.
 - Verified the public Headless and admin proxy paths return the expected unauthenticated 401 JSON
   responses instead of proxy/database 500 errors. No external Provider or real-call action ran.
+
+## 2026-08-19 — Phase 11 PR 1 investigation and authorization foundation
+
+- Recorded the master/GitHub/Railway/codebase analysis and the five-role permission matrix without
+  incorporating open PR #12.
+- Added the `operator` UserRole with a backward-compatible PostgreSQL enum migration and Zod input
+  support.
+- Added Japanese role labels and grouped the existing navigation by business purpose while keeping
+  PR 2–5 screens out of scope.
+- Reused HumanFollowupTask and SalesHandoffCard for operator work, enforcing organization and
+  assignee scope in API reads and mutations.
+- Added API coverage for operator login, admin creation, privilege-escalation denial, campaign
+  transition denial and assigned-only Followup access.
+- Replayed all 22 migrations on an isolated empty PostgreSQL database and passed 265 Mock-only
+  Unit/API/Worker tests plus workspace typechecks. No real call or external Provider action ran.
+- Pinned the transitive Prisma dependency `deepmerge-ts` to patched version 8.0.0 after GitHub's
+  production dependency audit disclosed GHSA-ggr8-5vv4-36mx; High/Critical findings returned to
+  zero.
+- GitHub Actions run `32221620990` passed dependency audit, release gates, Prisma checks, all 22
+  migrations, seed, lint, format, typecheck, 265 tests, existing E2E and all production builds.

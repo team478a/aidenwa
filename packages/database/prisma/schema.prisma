@@ -30,6 +30,7 @@ enum UserRole {
   system_admin
   admin
   manager
+  operator
   sales
 }
 

@@ -108,7 +108,19 @@ aside {
 }
 nav {
   display: grid;
-  gap: 7px;
+  gap: 18px;
+  overflow-y: auto;
+}
+.nav-group {
+  display: grid;
+  gap: 5px;
+}
+.nav-group > small {
+  color: #6f879f;
+  padding: 0 13px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 nav a {
   color: #9daec1;

@@ -3,6 +3,7 @@ import { PrismaClient, UserRole, UserStatus } from '@sales-ai/database';
 import { hashPassword } from '@sales-ai/shared/security';
 import { buildApp } from './app';
 import { writeAudit } from './audit';
+import { randomUUID } from 'node:crypto';
 
 const databaseUrl =
   process.env.DATABASE_URL ??
@@ -15,6 +16,7 @@ let otherOrganizationId = '';
 let adminId = '';
 let managerId = '';
 let salesId = '';
+let operatorId = '';
 let suspendedId = '';
 let otherUserId = '';
 let teamId = '';
@@ -76,7 +78,18 @@ beforeAll(async () => {
   teamId = team.id;
   secondTeamId = secondTeam.id;
   crossOrganizationTeamId = crossOrganizationTeam.id;
-  const [admin, manager, sales, suspended, otherUser] = await Promise.all([
+  const [operator, admin, manager, sales, suspended, otherUser] = await Promise.all([
+    prisma.user.create({
+      data: {
+        organizationId,
+        name: 'Operator',
+        email: `operator-${suffix}@example.test`,
+        passwordHash,
+        role: UserRole.operator,
+        status: UserStatus.active,
+        teamId,
+      },
+    }),
     prisma.user.create({
       data: {
         organizationId,
@@ -132,6 +145,7 @@ beforeAll(async () => {
   ]);
   adminId = admin.id;
   managerId = manager.id;
+  operatorId = operator.id;
   salesId = sales.id;
   suspendedId = suspended.id;
   otherUserId = otherUser.id;
@@ -146,7 +160,7 @@ afterAll(async () => {
     where: {
       OR: [
         { organizationId: { in: [organizationId, otherOrganizationId] } },
-        { entityId: { in: [adminId, managerId, salesId, suspendedId, otherUserId] } },
+        { entityId: { in: [adminId, managerId, operatorId, salesId, suspendedId, otherUserId] } },
       ],
     },
   });
@@ -203,6 +217,109 @@ describe('Stage 1 authentication and authorization', () => {
     expect(
       (await mutation(manager, 'PATCH', '/api/v1/organization', { name: 'No' })).statusCode,
     ).toBe(403);
+  });
+  it('recognizes operator and denies user administration and campaign transitions', async () => {
+    const operator = (await login(`operator-${suffix}@example.test`)).auth;
+    const me = await app.inject({
+      method: 'GET',
+      url: '/api/v1/auth/me',
+      headers: { cookie: operator.cookie },
+    });
+    expect(me.statusCode).toBe(200);
+    expect(me.json<{ user: { role: UserRole } }>().user.role).toBe(UserRole.operator);
+    expect(
+      (
+        await mutation(operator, 'POST', '/api/v1/users', {
+          name: 'Forbidden',
+          email: `operator-forbidden-${suffix}@example.test`,
+          password,
+          role: 'system_admin',
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await mutation(
+          operator,
+          'POST',
+          '/api/v1/campaigns/00000000-0000-4000-8000-000000000000/start',
+        )
+      ).statusCode,
+    ).toBe(403);
+  });
+  it('allows admin to create an operator but never a system administrator', async () => {
+    const admin = (await login(`admin-${suffix}@example.test`)).auth;
+    const created = await mutation(admin, 'POST', '/api/v1/users', {
+      name: 'Created Operator',
+      email: `created-operator-${suffix}@example.test`,
+      password,
+      role: 'operator',
+    });
+    expect(created.statusCode).toBe(201);
+    expect((created.json() as { user: { role: UserRole } }).user.role).toBe(UserRole.operator);
+    expect(
+      (
+        await mutation(admin, 'POST', '/api/v1/users', {
+          name: 'Forbidden System Admin',
+          email: `forbidden-system-${suffix}@example.test`,
+          password,
+          role: 'system_admin',
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+  it('limits an operator to assigned followups in their own organization', async () => {
+    const operator = (await login(`operator-${suffix}@example.test`)).auth;
+    const assigned = await prisma.humanFollowupTask.create({
+      data: {
+        organizationId,
+        campaignId: randomUUID(),
+        realtimeSessionId: randomUUID(),
+        phoneNumberId: randomUUID(),
+        requestedTimeWindowCode: 'anytime',
+        noteCode: 'phase11_test',
+        priority: '00_phase11',
+        dueAt: new Date('2000-01-01T00:00:00.000Z'),
+        maskedDestination: '***-****-1234',
+        assigneeUserId: operatorId,
+      },
+    });
+    const unassigned = await prisma.humanFollowupTask.create({
+      data: {
+        organizationId,
+        campaignId: randomUUID(),
+        realtimeSessionId: randomUUID(),
+        phoneNumberId: randomUUID(),
+        requestedTimeWindowCode: 'anytime',
+        noteCode: 'phase11_test',
+        maskedDestination: '***-****-5678',
+        assigneeUserId: salesId,
+      },
+    });
+    try {
+      const list = await app.inject({
+        method: 'GET',
+        url: '/api/v1/human-followup-tasks',
+        headers: { cookie: operator.cookie },
+      });
+      expect(list.statusCode).toBe(200);
+      const ids = list.json<{ tasks: { id: string }[] }>().tasks.map((task) => task.id);
+      expect(ids).toContain(assigned.id);
+      expect(ids).not.toContain(unassigned.id);
+      expect(
+        (
+          await app.inject({
+            method: 'GET',
+            url: `/api/v1/human-followup-tasks/${unassigned.id}`,
+            headers: { cookie: operator.cookie },
+          })
+        ).statusCode,
+      ).toBe(404);
+    } finally {
+      await prisma.humanFollowupTask.deleteMany({
+        where: { id: { in: [assigned.id, unassigned.id] } },
+      });
+    }
   });
   it('gives managers organization-wide sales assignment without Team administration rights', async () => {
     const manager = (await login(`manager-${suffix}@example.test`)).auth;

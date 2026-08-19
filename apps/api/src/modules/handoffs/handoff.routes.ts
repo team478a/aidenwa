@@ -34,16 +34,23 @@ type Deps = {
 
 export function registerHandoffRoutes(app: FastifyInstance, deps: Deps) {
   const { prisma } = deps;
-  const readRoles = [UserRole.system_admin, UserRole.admin, UserRole.manager, UserRole.sales];
+  const readRoles = [
+    UserRole.system_admin,
+    UserRole.admin,
+    UserRole.manager,
+    UserRole.operator,
+    UserRole.sales,
+  ];
+  const isAssignedRole = (role: UserRole) => role === UserRole.operator || role === UserRole.sales;
   const scopedCard = async (id: string, auth: AuthContext) =>
     prisma.salesHandoffCard.findFirst({
       where: {
         id,
         organizationId: auth.organizationId,
-        ...(auth.role === UserRole.sales
+        ...(isAssignedRole(auth.role)
           ? {
               OR: [
-                { followupTaskId: null },
+                ...(auth.role === UserRole.sales ? [{ followupTaskId: null }] : []),
                 {
                   followupTaskId: {
                     in: (
@@ -79,15 +86,14 @@ export function registerHandoffRoutes(app: FastifyInstance, deps: Deps) {
   app.get('/api/v1/sales-handoff-cards', async (request, reply) => {
     const auth = await deps.authorize(request, reply, readRoles);
     if (!auth) return;
-    const assignedIds =
-      auth.role === UserRole.sales
-        ? (
-            await prisma.humanFollowupTask.findMany({
-              where: { organizationId: auth.organizationId, assigneeUserId: auth.userId },
-              select: { id: true },
-            })
-          ).map((task) => task.id)
-        : undefined;
+    const assignedIds = isAssignedRole(auth.role)
+      ? (
+          await prisma.humanFollowupTask.findMany({
+            where: { organizationId: auth.organizationId, assigneeUserId: auth.userId },
+            select: { id: true },
+          })
+        ).map((task) => task.id)
+      : undefined;
     return {
       cards: await prisma.salesHandoffCard.findMany({
         where: {
