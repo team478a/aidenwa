@@ -21,7 +21,7 @@
 
 ## Phase 11 PR 1 — 調査・権限基盤
 
-- 状態: LOCAL IMPLEMENTATION COMPLETE / GITHUB CI PENDING
+- 状態: COMPLETE / DRAFT PR #13 REVIEW PENDING
 - 基準: `origin/master`の`d5a1f88`。open PR #12は未取込。
 - 現状分析: `docs/phase11/current-state-analysis.md`
 - 権限定義: `docs/phase11/role-permission-matrix.md`
@@ -35,10 +35,11 @@
 - typecheck: 全12 workspace PASS。
 - Unit/API/Worker: 76 files / 265 tests PASS。Phase 11認可テスト12/12 PASS。
 - Dependency audit: `deepmerge-ts`を8.0.0へ固定し、High/Critical 0件（Moderate 1件）。
-- E2E、production build、GitHub Actions: CI実行待ち。
+- E2E、production build: PASS。
+- GitHub Actions: run `32221620990` PASS（install、dependency audit、release gate、Prisma、全migration、seed、lint、format、typecheck、265 tests、E2E、build）。
 - 実電話、Twilio/OpenAI/Zoom/Calendar等の外部Provider通信: 0件。
 - Production関連Feature Flag: すべてfalseのまま。
-- PR 2へ進める条件: 本PRのE2E/build/CI PASSとレビュー完了。全組織管理API、専用system画面、初期クライアント管理者はPR 2で実装する。
+- PR 2へ進める条件: PR #13のレビュー・masterへのマージ完了。全組織管理API、専用system画面、初期クライアント管理者はPR 2で実装する。
 
 ## Phase 10 — Release Readiness
 
