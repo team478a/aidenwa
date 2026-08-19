@@ -940,3 +940,19 @@ lint` remains a required CI gate before build.
 - Public unauthenticated smoke: `/backend/external/v1/call-profiles` returns 401
   `UNAUTHENTICATED` with a request ID, and `/backend/auth/me` returns 401 `UNAUTHENTICATED`.
 - External Provider/API calls and real telephone calls: 0.
+
+## Phase 11 PR 2 — システム管理者・クライアント管理
+
+- Status: COMPLETE LOCALLY / DRAFT PR PREPARATION.
+- `system_admin`専用のクライアント企業一覧・詳細・登録・停止・再開・利用上限更新・監査ログAPI/UIを追加した。
+- Organizationへ契約プラン、月間架電上限、同時架電上限を追加し、既存データへ安全なdefaultを設定した。
+- クライアント作成と同一transactionで初期`admin`を1名作成する。一時パスワードはhashのみ保存し、APIレスポンス・監査ログへ再表示しない。
+- 初期管理者は最初にパスワード変更が必須で、変更前は認証関連以外のAPIを利用できない。変更時に既存セッションを無効化する。
+- 組織停止時は全既存セッションを即時削除する。物理削除APIは追加していない。
+- クライアント管理者自身による組織停止・再開を廃止し、`system_admin`専用操作へ分離した。
+- 専用空DBで23件の全migrationを適用: PASS。Prisma format/validate/generate: PASS。
+- lint: PASS。変更ファイルformat: PASS。全workspace typecheck: PASS。
+- Unit/API/Worker: 77 files / 269 tests PASS。Mock-only E2E: 8/8 PASS。production build: PASS。
+- リポジトリ全体のWindowsローカルformat checkは既存CRLF差分を検出するため、変更ファイルのみ確認した。GitHub ActionsでLinux全体checkを再確認する。
+- 実電話発信: 0件。外部Provider通信: 0件。Production関連Feature Flag: すべて無効。
+- PR 3以降（ロール別ダッシュボード等）には着手していない。

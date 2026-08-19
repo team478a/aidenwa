@@ -819,3 +819,22 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   zero.
 - GitHub Actions run `32221620990` passed dependency audit, release gates, Prisma checks, all 22
   migrations, seed, lint, format, typecheck, 265 tests, existing E2E and all production builds.
+
+## 2026-08-19 — Phase 11 PR 2 system and client administration
+
+- Added Organization contract plan, monthly call limit and concurrent call limit fields with
+  database constraints and backward-compatible defaults.
+- Added `mustChangePassword` to User and required initial client administrators to replace their
+  one-time temporary password before using non-authentication APIs.
+- Added system-administrator-only APIs to list, inspect, create, suspend, reactivate and update
+  limits for client organizations, plus organization-specific audit log inspection.
+- Added atomic client/initial-admin creation, hash-only credential storage, sanitized auditing and
+  immediate organization-session invalidation on suspension.
+- Removed organization status changes from the client-admin self-service organization update API.
+- Added `/system/organizations` list/create, detail, audit log and first-login password-change UI.
+- Added tests for system-admin-only access, cross-organization visibility denial, initial-admin
+  creation, secret non-disclosure, password-change enforcement, limit updates and suspension
+  session invalidation.
+- Applied all 23 migrations to a dedicated empty PostgreSQL database and passed lint, changed-file
+  format, workspace typechecks, 269 Unit/API/Worker tests, 8 Mock-only E2E tests and production
+  build. No external Provider connection or real telephone call ran.

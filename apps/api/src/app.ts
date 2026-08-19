@@ -14,11 +14,13 @@ import {
 import { apiEnvSchema } from '@sales-ai/validation/env';
 import {
   changePasswordSchema,
+  createSystemOrganizationSchema,
   createTeamSchema,
   createUserSchema,
   idParamsSchema,
   loginSchema,
   updateOrganizationSchema,
+  updateSystemOrganizationLimitsSchema,
   updateTeamSchema,
   updateUserSchema,
 } from '@sales-ai/validation';
@@ -46,6 +48,7 @@ const publicUser = {
   email: true,
   role: true,
   status: true,
+  mustChangePassword: true,
   lastLoginAt: true,
   createdAt: true,
   updatedAt: true,
@@ -110,6 +113,19 @@ export function buildApp(environment: NodeJS.ProcessEnv = process.env, options: 
       if (session) await prisma.session.delete({ where: { id: session.id } });
       clearCookies(reply, environment.NODE_ENV === 'production');
       error(reply, 401, 'UNAUTHENTICATED', 'セッションが無効です');
+      return;
+    }
+    const passwordChangeAllowedPaths = new Set([
+      '/api/v1/auth/me',
+      '/api/v1/auth/session',
+      '/api/v1/auth/change-password',
+      '/api/v1/auth/logout',
+    ]);
+    if (
+      session.user.mustChangePassword &&
+      !passwordChangeAllowedPaths.has(request.url.split('?')[0] ?? '')
+    ) {
+      error(reply, 403, 'PASSWORD_CHANGE_REQUIRED', '初期パスワードの変更が必要です');
       return;
     }
     const context = {
@@ -299,7 +315,10 @@ export function buildApp(environment: NodeJS.ProcessEnv = process.env, options: 
       return error(reply, 400, 'INVALID_PASSWORD', '現在のパスワードが正しくありません');
     const newHash = await hashPassword(input.newPassword);
     await prisma.$transaction([
-      prisma.user.update({ where: { id: user.id }, data: { passwordHash: newHash } }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: newHash, mustChangePassword: false },
+      }),
       prisma.session.deleteMany({ where: { userId: user.id } }),
       prisma.auditLog.create({
         data: {
@@ -315,6 +334,242 @@ export function buildApp(environment: NodeJS.ProcessEnv = process.env, options: 
     ]);
     clearCookies(reply, environment.NODE_ENV === 'production');
     return reply.code(204).send();
+  });
+
+  const systemOrganizationSelect = {
+    id: true,
+    name: true,
+    slug: true,
+    timezone: true,
+    status: true,
+    plan: true,
+    monthlyCallLimit: true,
+    concurrentCallLimit: true,
+    createdAt: true,
+    updatedAt: true,
+  } as const;
+
+  function tokyoMonthStart(now = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+    }).formatToParts(now);
+    const year = Number(parts.find((part) => part.type === 'year')?.value);
+    const month = Number(parts.find((part) => part.type === 'month')?.value);
+    return new Date(Date.UTC(year, month - 1, 1) - 9 * 60 * 60 * 1000);
+  }
+
+  async function organizationSummary(organization: {
+    id: string;
+    users?: { lastLoginAt: Date | null }[];
+  }) {
+    const monthStart = tokyoMonthStart();
+    const [usage, activeStop, lastLedger] = await Promise.all([
+      prisma.usageLedger.aggregate({
+        where: { organizationId: organization.id, occurredAt: { gte: monthStart } },
+        _sum: { callCount: true, amountMinor: true },
+      }),
+      prisma.emergencyStop.findFirst({
+        where: {
+          active: true,
+          OR: [
+            { scope: 'organization', organizationId: organization.id },
+            { scope: 'system', organizationId: null },
+          ],
+        },
+        select: { id: true, scope: true, reason: true, activatedAt: true },
+        orderBy: { activatedAt: 'desc' },
+      }),
+      prisma.usageLedger.findFirst({
+        where: { organizationId: organization.id },
+        select: { occurredAt: true },
+        orderBy: { occurredAt: 'desc' },
+      }),
+    ]);
+    const lastLoginAt = organization.users
+      ?.map((user) => user.lastLoginAt)
+      .filter((value): value is Date => value !== null)
+      .sort((left, right) => right.getTime() - left.getTime())[0];
+    const lastUsedAt = [lastLoginAt, lastLedger?.occurredAt]
+      .filter((value): value is Date => value !== undefined)
+      .sort((left, right) => right.getTime() - left.getTime())[0];
+    return {
+      monthlyCallCount: usage._sum.callCount ?? 0,
+      monthlyEstimatedCostMinor: usage._sum.amountMinor ?? 0,
+      lastUsedAt: lastUsedAt ?? null,
+      emergencyStop: activeStop,
+    };
+  }
+
+  app.get('/api/v1/system/organizations', async (request, reply) => {
+    const auth = await authorize(request, reply, [UserRole.system_admin]);
+    if (!auth) return;
+    const organizations = await prisma.organization.findMany({
+      select: {
+        ...systemOrganizationSelect,
+        users: { select: { lastLoginAt: true } },
+        _count: { select: { users: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return {
+      organizations: await Promise.all(
+        organizations.map(async ({ users, ...organization }) => ({
+          ...organization,
+          ...(await organizationSummary({ id: organization.id, users })),
+        })),
+      ),
+    };
+  });
+
+  app.get('/api/v1/system/organizations/:id', async (request, reply) => {
+    const auth = await authorize(request, reply, [UserRole.system_admin]);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const organization = await prisma.organization.findUnique({
+      where: { id },
+      select: {
+        ...systemOrganizationSelect,
+        users: { select: publicUser, orderBy: { createdAt: 'asc' } },
+        _count: { select: { users: true, teams: true, companies: true } },
+      },
+    });
+    if (!organization) return error(reply, 404, 'NOT_FOUND', 'クライアント企業が見つかりません');
+    return {
+      organization: {
+        ...organization,
+        ...(await organizationSummary({ id: organization.id, users: organization.users })),
+      },
+    };
+  });
+
+  app.post('/api/v1/system/organizations', async (request, reply) => {
+    const auth = await authorize(request, reply, [UserRole.system_admin]);
+    if (!auth || !verifyCsrf(request, reply, auth)) return;
+    const input = createSystemOrganizationSchema.parse(request.body);
+    if (await prisma.organization.findUnique({ where: { slug: input.slug }, select: { id: true } }))
+      return error(reply, 409, 'SLUG_CONFLICT', 'このslugは既に使用されています');
+    const passwordHash = await hashPassword(input.administrator.temporaryPassword);
+    const created = await prisma.$transaction(async (transaction) => {
+      const organization = await transaction.organization.create({
+        data: {
+          name: input.name,
+          slug: input.slug,
+          timezone: input.timezone,
+          plan: input.plan,
+          monthlyCallLimit: input.monthlyCallLimit,
+          concurrentCallLimit: input.concurrentCallLimit,
+        },
+        select: systemOrganizationSelect,
+      });
+      const administrator = await transaction.user.create({
+        data: {
+          organizationId: organization.id,
+          name: input.administrator.name,
+          email: input.administrator.email,
+          passwordHash,
+          role: UserRole.admin,
+          status: UserStatus.active,
+          mustChangePassword: true,
+        },
+        select: publicUser,
+      });
+      return { organization, administrator };
+    });
+    await writeAudit(prisma, {
+      organizationId: created.organization.id,
+      userId: auth.userId,
+      action: 'system.organization_created',
+      entityType: 'organization',
+      entityId: created.organization.id,
+      afterData: {
+        organization: created.organization,
+        administrator: created.administrator,
+        credentialDelivery: 'out_of_band',
+      },
+      ...requestMetadata(request),
+    });
+    return reply.code(201).send(created);
+  });
+
+  app.patch('/api/v1/system/organizations/:id/limits', async (request, reply) => {
+    const auth = await authorize(request, reply, [UserRole.system_admin]);
+    if (!auth || !verifyCsrf(request, reply, auth)) return;
+    const { id } = idParamsSchema.parse(request.params);
+    const input = updateSystemOrganizationLimitsSchema.parse(request.body);
+    const before = await prisma.organization.findUnique({
+      where: { id },
+      select: systemOrganizationSelect,
+    });
+    if (!before) return error(reply, 404, 'NOT_FOUND', 'クライアント企業が見つかりません');
+    const organization = await prisma.organization.update({
+      where: { id },
+      data: input,
+      select: systemOrganizationSelect,
+    });
+    await writeAudit(prisma, {
+      organizationId: id,
+      userId: auth.userId,
+      action: 'system.organization_limits_updated',
+      entityType: 'organization',
+      entityId: id,
+      beforeData: before,
+      afterData: organization,
+      ...requestMetadata(request),
+    });
+    return { organization };
+  });
+
+  for (const [path, status, action] of [
+    ['suspend', 'suspended', 'system.organization_suspended'],
+    ['activate', 'active', 'system.organization_activated'],
+  ] as const) {
+    app.post(`/api/v1/system/organizations/:id/${path}`, async (request, reply) => {
+      const auth = await authorize(request, reply, [UserRole.system_admin]);
+      if (!auth || !verifyCsrf(request, reply, auth)) return;
+      const { id } = idParamsSchema.parse(request.params);
+      const before = await prisma.organization.findUnique({
+        where: { id },
+        select: systemOrganizationSelect,
+      });
+      if (!before) return error(reply, 404, 'NOT_FOUND', 'クライアント企業が見つかりません');
+      const [organization] = await prisma.$transaction([
+        prisma.organization.update({
+          where: { id },
+          data: { status },
+          select: systemOrganizationSelect,
+        }),
+        prisma.session.deleteMany({ where: { organizationId: id } }),
+      ]);
+      await writeAudit(prisma, {
+        organizationId: id,
+        userId: auth.userId,
+        action,
+        entityType: 'organization',
+        entityId: id,
+        beforeData: before,
+        afterData: organization,
+        ...requestMetadata(request),
+      });
+      return { organization };
+    });
+  }
+
+  app.get('/api/v1/system/organizations/:id/audit-logs', async (request, reply) => {
+    const auth = await authorize(request, reply, [UserRole.system_admin]);
+    if (!auth) return;
+    const { id } = idParamsSchema.parse(request.params);
+    if (!(await prisma.organization.findUnique({ where: { id }, select: { id: true } })))
+      return error(reply, 404, 'NOT_FOUND', 'クライアント企業が見つかりません');
+    return {
+      auditLogs: await prisma.auditLog.findMany({
+        where: { organizationId: id },
+        include: { user: { select: { id: true, name: true, email: true } } },
+        orderBy: { occurredAt: 'desc' },
+        take: 200,
+      }),
+    };
   });
 
   app.get('/api/v1/users', async (request, reply) => {
@@ -552,7 +807,6 @@ export function buildApp(environment: NodeJS.ProcessEnv = process.env, options: 
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.slug !== undefined ? { slug: input.slug } : {}),
       ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
-      ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.settings !== undefined
         ? { settings: input.settings as Prisma.InputJsonValue }
         : {}),

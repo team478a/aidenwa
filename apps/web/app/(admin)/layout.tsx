@@ -53,6 +53,16 @@ const menuGroups: readonly MenuGroup[] = [
     ],
   },
   {
+    label: 'システム管理',
+    links: [
+      {
+        href: '/system/organizations',
+        label: 'クライアント企業',
+        roles: ['system_admin'],
+      },
+    ],
+  },
+  {
     label: '組織管理',
     links: [
       { href: '/users', label: 'ユーザー', roles: ['admin'] },
@@ -102,6 +112,14 @@ export default function AdminLayout({ children }: Readonly<{ children: ReactNode
   useEffect(() => {
     api<{ user: CurrentUser }>('/auth/me')
       .then((result) => {
+        if (result.user.mustChangePassword && pathname !== '/change-password') {
+          router.replace('/change-password');
+          return;
+        }
+        if (!result.user.mustChangePassword && pathname === '/change-password') {
+          router.replace('/dashboard');
+          return;
+        }
         const route = links.find((item) => matchesRoute(pathname, item.href));
         if (route && !route.roles.includes(result.user.role)) router.replace('/dashboard');
         else setUser(result.user);

@@ -13,6 +13,7 @@ export type CurrentUser = {
   role: Role;
   status: string;
   teamId: string | null;
+  mustChangePassword: boolean;
 };
 
 function csrfToken(): string {
