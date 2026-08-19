@@ -34,6 +34,7 @@
 - lint: PASS。今回変更ファイルのformat: PASS。Windowsローカルの全体formatは基準masterの既存改行差分494件を検出するため、GitHub CIで最終判定する。
 - typecheck: 全12 workspace PASS。
 - Unit/API/Worker: 76 files / 265 tests PASS。Phase 11認可テスト12/12 PASS。
+- Dependency audit: `deepmerge-ts`を8.0.0へ固定し、High/Critical 0件（Moderate 1件）。
 - E2E、production build、GitHub Actions: CI実行待ち。
 - 実電話、Twilio/OpenAI/Zoom/Calendar等の外部Provider通信: 0件。
 - Production関連Feature Flag: すべてfalseのまま。

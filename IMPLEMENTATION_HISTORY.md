@@ -814,3 +814,6 @@ Verification results are recorded in `IMPLEMENTATION_STATUS.md` after the final 
   transition denial and assigned-only Followup access.
 - Replayed all 22 migrations on an isolated empty PostgreSQL database and passed 265 Mock-only
   Unit/API/Worker tests plus workspace typechecks. No real call or external Provider action ran.
+- Pinned the transitive Prisma dependency `deepmerge-ts` to patched version 8.0.0 after GitHub's
+  production dependency audit disclosed GHSA-ggr8-5vv4-36mx; High/Critical findings returned to
+  zero.
